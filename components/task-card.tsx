@@ -17,7 +17,7 @@ interface TaskCardProps {
   onMoveDown?: (task: Task) => void
   onMoveHorizon?: (task: Task, direction: "up" | "down") => void
   onEdit?: (task: Task, newTitle: string) => void
-  onAddSubtask?: (task: Task, title: string) => void
+  onAddSubtask?: (task: Task) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
   onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
@@ -43,10 +43,7 @@ export function TaskCard({
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
-  const [isAddingSubtask, setIsAddingSubtask] = useState(false)
-  const [subtaskTitle, setSubtaskTitle] = useState("")
   const editInputRef = useRef<HTMLInputElement | null>(null)
-  const subtaskInputRef = useRef<HTMLInputElement | null>(null)
   const lastTapRef = useRef<number>(0)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -64,11 +61,6 @@ export function TaskCard({
     }
   }, [task.title, isEditing])
 
-  useEffect(() => {
-    if (isAddingSubtask && subtaskInputRef.current) {
-      subtaskInputRef.current.focus()
-    }
-  }, [isAddingSubtask])
 
   const startEditing = () => {
     if (isEditing) return
@@ -110,17 +102,6 @@ export function TaskCard({
   const canMoveHorizonUp = currentHorizonIndex > 0
   const canMoveHorizonDown = currentHorizonIndex < horizonOrder.length - 1
 
-  const handleSubtaskCreate = (keepOpen: boolean) => {
-    const trimmed = subtaskTitle.trim()
-    if (!trimmed || !onAddSubtask) return
-    onAddSubtask(task, trimmed)
-    setSubtaskTitle("")
-    if (!keepOpen) {
-      setIsAddingSubtask(false)
-      return
-    }
-    requestAnimationFrame(() => subtaskInputRef.current?.focus())
-  }
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isEditing || isSubtask) return
@@ -279,51 +260,6 @@ export function TaskCard({
           {task.description && !isEditing && (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{task.description}</p>
           )}
-          {isAddingSubtask && (
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                ref={subtaskInputRef}
-                type="text"
-                value={subtaskTitle}
-                onChange={(e) => setSubtaskTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    if (subtaskTitle.trim()) {
-                      handleSubtaskCreate(true)
-                    }
-                  } else if (e.key === "Escape") {
-                    e.preventDefault()
-                    setSubtaskTitle("")
-                    setIsAddingSubtask(false)
-                  }
-                }}
-                onBlur={() => {
-                  if (subtaskTitle.trim()) {
-                    handleSubtaskCreate(false)
-                  } else {
-                    setIsAddingSubtask(false)
-                  }
-                }}
-                placeholder="Subtask title..."
-                className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setSubtaskTitle("")
-                  setIsAddingSubtask(false)
-                }}
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Cancel subtask</span>
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Action buttons */}
@@ -381,7 +317,7 @@ export function TaskCard({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
-                onClick={() => setIsAddingSubtask(true)}
+                onClick={() => onAddSubtask(task)}
               >
                 <Plus className="h-4 w-4" />
                 <span className="sr-only">Add subtask</span>

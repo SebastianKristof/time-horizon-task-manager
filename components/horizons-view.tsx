@@ -31,12 +31,21 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     someday: "",
   })
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
+  const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
+  const [subtaskInputValue, setSubtaskInputValue] = useState("")
+  const subtaskInputRef = useRef<HTMLInputElement | null>(null)
   const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
     now: null,
     soon: null,
     later: null,
     someday: null,
   })
+
+  useEffect(() => {
+    if (subtaskInputParentId && subtaskInputRef.current) {
+      subtaskInputRef.current.focus()
+    }
+  }, [subtaskInputParentId])
 
   useEffect(() => {
     const supabase = createClient()
@@ -640,7 +649,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const handleAddSubtask = async (parentTask: Task, title: string) => {
+  const handleAddSubtask = async (parentTask: Task, title: string, keepInputOpen: boolean = false) => {
     if (!title.trim()) return
 
     const supabase = createClient()
@@ -668,6 +677,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     // Optimistic update
     setTasks((prev) => [...prev, newSubtask])
+    setSubtaskInputValue("")
 
     try {
       const { data, error } = await supabase
@@ -690,10 +700,18 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       setTasks((prev) =>
         prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t)),
       )
+
+      // Keep input open if requested (for Enter key behavior)
+      if (keepInputOpen) {
+        requestAnimationFrame(() => subtaskInputRef.current?.focus())
+      } else {
+        setSubtaskInputParentId(null)
+      }
     } catch (err) {
       console.error("[v0] Error creating subtask:", err)
       // Revert
       setTasks((prev) => prev.filter((t) => t.id !== newSubtask.id))
+      setSubtaskInputParentId(null)
     }
   }
 
@@ -785,31 +803,105 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                 }
               }}
             >
-              {horizonTasks.map((task) => {
+              {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
                 const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
                 const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
                 const canMoveUp = !isSubtask && currentTopLevelIndex > 0
                 const canMoveDown = !isSubtask && currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
 
+                // Determine if we should show the subtask input after this task
+                // Show input after the last subtask of a parent, or after a parent with no subtasks
+                const isParentTask = !task.parent_task_id
+                let showSubtaskInput = false
+                
+                if (subtaskInputParentId) {
+                  if (isParentTask && task.id === subtaskInputParentId) {
+                    // Check if this parent has any subtasks
+                    const parentSubtasks = horizonTasks.filter((t) => t.parent_task_id === task.id)
+                    // Show input after parent if it has no subtasks, or we'll show it after the last subtask
+                    showSubtaskInput = parentSubtasks.length === 0
+                  } else if (isSubtask && task.parent_task_id === subtaskInputParentId) {
+                    // Show input after the last subtask of this parent
+                    const nextTask = horizonTasks[taskIndex + 1]
+                    showSubtaskInput = !nextTask || nextTask.parent_task_id !== subtaskInputParentId
+                  }
+                }
+
                 return (
-                  <div key={task.id} className={isSubtask ? "ml-6" : ""}>
-                    <TaskCard
-                      task={task}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                      onToggleComplete={handleToggleComplete}
-                      onDelete={handleDelete}
-                      isSubtask={isSubtask}
-                      onMoveUp={handleMoveUp}
-                      onMoveDown={handleMoveDown}
-                      onMoveHorizon={handleMoveHorizon}
-                      onEdit={handleEdit}
-                      onAddSubtask={handleAddSubtask}
-                      canMoveUp={canMoveUp}
-                      canMoveDown={canMoveDown}
-                      onDropOnTask={handleDropOnTask}
-                    />
+                  <div key={task.id}>
+                    <div className={isSubtask ? "ml-6" : ""}>
+                      <TaskCard
+                        task={task}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        onToggleComplete={handleToggleComplete}
+                        onDelete={handleDelete}
+                        isSubtask={isSubtask}
+                        onMoveUp={handleMoveUp}
+                        onMoveDown={handleMoveDown}
+                        onMoveHorizon={handleMoveHorizon}
+                        onEdit={handleEdit}
+                        onAddSubtask={(parentTask) => {
+                          setSubtaskInputParentId(parentTask.id)
+                          setSubtaskInputValue("")
+                        }}
+                        canMoveUp={canMoveUp}
+                        canMoveDown={canMoveDown}
+                        onDropOnTask={handleDropOnTask}
+                      />
+                    </div>
+                    {showSubtaskInput && (
+                      <div className="ml-6 mt-1 flex items-center gap-2">
+                        <input
+                          ref={subtaskInputRef}
+                          type="text"
+                          value={subtaskInputValue}
+                          onChange={(e) => setSubtaskInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              if (subtaskInputValue.trim() && subtaskInputParentId) {
+                                const parentTask = horizonTasks.find((t) => t.id === subtaskInputParentId)
+                                if (parentTask) {
+                                  handleAddSubtask(parentTask, subtaskInputValue, true)
+                                }
+                              }
+                            } else if (e.key === "Escape") {
+                              e.preventDefault()
+                              setSubtaskInputValue("")
+                              setSubtaskInputParentId(null)
+                            }
+                          }}
+                          onBlur={() => {
+                            if (subtaskInputValue.trim() && subtaskInputParentId) {
+                              const parentTask = horizonTasks.find((t) => t.id === subtaskInputParentId)
+                              if (parentTask) {
+                                handleAddSubtask(parentTask, subtaskInputValue, false)
+                              }
+                            } else {
+                              setSubtaskInputParentId(null)
+                            }
+                          }}
+                          placeholder="Subtask title..."
+                          className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSubtaskInputValue("")
+                            setSubtaskInputParentId(null)
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Cancel subtask</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
