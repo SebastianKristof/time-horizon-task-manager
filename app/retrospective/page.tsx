@@ -32,11 +32,11 @@ export default async function RetrospectivePage() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-border p-4">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 border-b border-border p-4">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/horizons">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Horizons
+          <Link href="/horizons" className="flex items-center gap-1.5">
+            <ChevronLeft className="h-4 w-4 shrink-0" />
+            <span className="hidden min-[400px]:inline">Back to Horizons</span>
           </Link>
         </Button>
         <h1 className="text-xl font-semibold">Retrospective</h1>

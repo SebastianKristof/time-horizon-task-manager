@@ -20,9 +20,9 @@ export default async function CapturePage() {
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border p-4">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/horizons">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Horizons
+          <Link href="/horizons" className="flex items-center gap-1.5">
+            <ChevronLeft className="h-4 w-4 shrink-0" />
+            <span className="hidden min-[400px]:inline">Back to Horizons</span>
           </Link>
         </Button>
       </header>

@@ -35,22 +35,22 @@ export default async function HorizonsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-border p-4">
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 border-b border-border p-4">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">Time Horizons</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <ThemeToggle />
           <Button variant="outline" size="sm" asChild>
-            <Link href="/retrospective">
-              <History className="h-4 w-4" />
-              Retrospective
+            <Link href="/retrospective" className="flex items-center gap-1.5">
+              <History className="h-4 w-4 shrink-0" />
+              <span className="hidden min-[400px]:inline">Retrospective</span>
             </Link>
           </Button>
           <Button size="sm" asChild>
-            <Link href="/capture">
-              <Plus className="h-4 w-4" />
-              Bulk add tasks
+            <Link href="/capture" className="flex items-center gap-1.5">
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="hidden min-[400px]:inline">Bulk add tasks</span>
             </Link>
           </Button>
         </div>

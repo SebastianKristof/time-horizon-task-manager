@@ -287,7 +287,7 @@ export function TaskCard({
                 }
               }}
               className={cn(
-                "w-full text-left font-medium leading-tight text-foreground",
+                "w-full text-left font-medium leading-tight text-foreground break-words",
                 task.completed && "text-muted-foreground",
               )}
             >
