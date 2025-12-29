@@ -37,9 +37,10 @@ A task manager focused on calm attention management, organizing tasks across tim
 
 4. **Set up the database**
    
-   Run the SQL migration scripts in your Supabase SQL Editor:
+   Run the SQL migration scripts in your Supabase SQL Editor (in order):
    - `scripts/001_create_tables.sql` - Creates the tasks and snapshots tables with RLS policies
    - `scripts/002_add_snapshot_rls_public.sql` - Adds public read access for shared snapshots
+   - `scripts/003_add_task_ordering_and_subtasks.sql` - Adds position and parent_task_id fields for task ordering and subtasks
 
 5. **Start the development server**
    ```bash

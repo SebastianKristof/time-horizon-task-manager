@@ -5,9 +5,11 @@ alter table public.tasks add column if not exists position integer not null defa
 alter table public.tasks add column if not exists parent_task_id uuid;
 
 -- Add check constraint to prevent circular references
+alter table public.tasks drop constraint if exists tasks_no_self_parent;
 alter table public.tasks add constraint tasks_no_self_parent check (parent_task_id != id);
 
 -- Add foreign key constraint for parent_task_id (self-referential)
+alter table public.tasks drop constraint if exists tasks_parent_task_id_fkey;
 alter table public.tasks add constraint tasks_parent_task_id_fkey 
   foreign key (parent_task_id) references public.tasks(id) on delete cascade;
 
