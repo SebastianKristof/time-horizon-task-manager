@@ -17,16 +17,38 @@ export default async function RetrospectivePage() {
     redirect("/")
   }
 
-  // Fetch all completed tasks (show immediately, no 24h filter)
-  const { data: completedTasks, error } = await supabase
+  // Fetch all completed tasks and their subtasks (even if subtasks are not completed)
+  // First, get all completed tasks
+  const { data: completedTasks, error: completedError } = await supabase
     .from("tasks")
     .select("*")
     .eq("user_id", user.id)
     .eq("completed", true)
     .order("completed_at", { ascending: false })
 
-  if (error) {
-    console.error("[v0] Error fetching completed tasks:", error)
+  if (completedError) {
+    console.error("[v0] Error fetching completed tasks:", completedError)
+  }
+
+  // Then, get all subtasks of completed parent tasks (even if subtasks are not completed)
+  const completedTaskIds = (completedTasks || []).map((t) => t.id)
+  let allTasks: Task[] = [...(completedTasks || [])]
+
+  if (completedTaskIds.length > 0) {
+    const { data: subtasks, error: subtasksError } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .in("parent_task_id", completedTaskIds)
+
+    if (subtasksError) {
+      console.error("[v0] Error fetching subtasks:", subtasksError)
+    } else {
+      // Add subtasks that aren't already in the list (in case they're also completed)
+      const existingIds = new Set(allTasks.map((t) => t.id))
+      const newSubtasks = (subtasks || []).filter((t) => !existingIds.has(t.id))
+      allTasks = [...allTasks, ...newSubtasks]
+    }
   }
 
   return (
@@ -45,7 +67,7 @@ export default async function RetrospectivePage() {
 
       {/* Main content */}
       <main className="flex-1 p-4">
-        <RetrospectiveView initialTasks={(completedTasks as Task[]) || []} userId={user.id} />
+        <RetrospectiveView initialTasks={(allTasks as Task[]) || []} userId={user.id} />
       </main>
     </div>
   )

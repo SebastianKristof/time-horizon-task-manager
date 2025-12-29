@@ -27,24 +27,49 @@ export function RetrospectiveView({ initialTasks, userId }: RetrospectiveViewPro
           console.log("[v0] Retrospective real-time update:", payload)
           if (payload.eventType === "UPDATE") {
             const updatedTask = payload.new as Task
-            // Only show completed tasks in retrospective
-            if (updatedTask.completed) {
-              setTasks((prev) => {
-                const exists = prev.some((t) => t.id === updatedTask.id)
-                if (exists) {
+            
+            setTasks((prev) => {
+              const existingIds = new Set(prev.map((t) => t.id))
+              const completedTaskIds = new Set(prev.filter((t) => t.completed).map((t) => t.id))
+              
+              // If a task is completed, add it
+              if (updatedTask.completed) {
+                if (existingIds.has(updatedTask.id)) {
                   // Update existing task
                   return prev.map((task) => (task.id === updatedTask.id ? updatedTask : task))
                 } else {
-                  // Add new completed task
+                  // Add new completed task and fetch its subtasks
                   return [...prev, updatedTask]
                 }
-              })
-            } else {
-              // Remove task if it's unchecked
-              setTasks((prev) => prev.filter((task) => task.id !== updatedTask.id))
-            }
+              } else {
+                // If a task is uncompleted
+                // Remove it if it's a top-level task
+                // Keep it if it's a subtask of a completed parent
+                const isSubtaskOfCompleted = updatedTask.parent_task_id && completedTaskIds.has(updatedTask.parent_task_id)
+                
+                if (isSubtaskOfCompleted) {
+                  // Update the subtask even though it's not completed
+                  return prev.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+                } else {
+                  // Remove task if it's unchecked and not a subtask of a completed parent
+                  return prev.filter((task) => task.id !== updatedTask.id)
+                }
+              }
+            })
           } else if (payload.eventType === "DELETE") {
             setTasks((prev) => prev.filter((task) => task.id !== payload.old.id))
+          } else if (payload.eventType === "INSERT") {
+            const newTask = payload.new as Task
+            // If it's a new subtask of a completed parent, add it
+            setTasks((prev) => {
+              const completedTaskIds = new Set(prev.filter((t) => t.completed).map((t) => t.id))
+              const isSubtaskOfCompleted = newTask.parent_task_id && completedTaskIds.has(newTask.parent_task_id)
+              
+              if (newTask.completed || isSubtaskOfCompleted) {
+                return [...prev, newTask]
+              }
+              return prev
+            })
           }
         },
       )
@@ -63,14 +88,39 @@ export function RetrospectiveView({ initialTasks, userId }: RetrospectiveViewPro
   }, [userId])
   // Group tasks by month and organize with subtasks under parents
   const tasksByMonth = useMemo(() => {
-    // Only show completed tasks
+    // Show completed tasks and their subtasks (even if subtasks are not completed)
+    // First, get all completed tasks
     const completedTasks = tasks.filter((t) => t.completed)
+    const completedTaskIds = new Set(completedTasks.map((t) => t.id))
+    
+    // Then, include all subtasks of completed tasks (even if not completed)
+    const subtasksOfCompleted = tasks.filter((t) => 
+      t.parent_task_id && completedTaskIds.has(t.parent_task_id)
+    )
+    
+    // Combine completed tasks with their subtasks
+    const tasksToShow = [...completedTasks, ...subtasksOfCompleted]
     const grouped: Record<string, Task[]> = {}
 
-    // First, group tasks by month
+    // Create a map of parent task IDs to their completion dates
+    const parentCompletionDates = new Map<string, string>()
     completedTasks.forEach((task) => {
-      // Use completed_at, fallback to updated_at if null
-      const dateString = task.completed_at || task.updated_at
+      if (task.completed_at || task.updated_at) {
+        parentCompletionDates.set(task.id, task.completed_at || task.updated_at || "")
+      }
+    })
+
+    // First, group tasks by month
+    tasksToShow.forEach((task) => {
+      // For subtasks, use parent's completion date; for completed tasks, use their own
+      let dateString: string | undefined
+      if (task.parent_task_id && parentCompletionDates.has(task.parent_task_id)) {
+        // Subtask: use parent's completion date
+        dateString = parentCompletionDates.get(task.parent_task_id)
+      } else {
+        // Top-level completed task: use its own completion date
+        dateString = task.completed_at || task.updated_at
+      }
       
       if (!dateString) {
         // Skip tasks without dates
