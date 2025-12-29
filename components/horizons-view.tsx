@@ -42,10 +42,17 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
           }
         },
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        if (err) {
+          console.error("[v0] Real-time subscription error:", err)
+        }
+        console.log("[v0] Real-time status:", status)
+      })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [userId])
 

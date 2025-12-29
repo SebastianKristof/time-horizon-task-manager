@@ -23,7 +23,7 @@ export default function LoginPage() {
     setIsLoading(true)
     setError(null)
 
-    console.log("[v0] Attempting login with email:", email)
+    console.log("[v0] Login attempt started for:", email)
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -31,10 +31,8 @@ export default function LoginPage() {
         password,
       })
 
-      console.log("[v0] Login response:", { data, error })
-
       if (error) {
-        console.log("[v0] Login error:", error.message)
+        console.log("[v0] Auth error details:", error)
         if (error.message.includes("Email not confirmed") || error.message.includes("email_not_confirmed")) {
           setError("Please check your email and confirm your account before signing in.")
         } else if (error.message.includes("Invalid login credentials")) {
@@ -47,11 +45,10 @@ export default function LoginPage() {
       }
 
       if (data.session) {
-        console.log("[v0] Login successful, redirecting to /horizons")
-        // Give the session time to be set in cookies
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        router.push("/horizons")
-        router.refresh()
+        console.log("[v0] Session established, initializing redirect...")
+        // This often works more reliably than router.push in complex auth scenarios with middleware
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        window.location.href = "/horizons"
       } else {
         console.log("[v0] No session returned")
         setError("Unable to sign in. Please try again.")
