@@ -106,7 +106,7 @@ export function TaskCard({
 
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isEditing || isSubtask) return
+    if (isEditing) return
     lastPointerTypeRef.current = e.pointerType
     skipEditClickRef.current = false
     if (e.pointerType === "mouse") {
@@ -197,27 +197,78 @@ export function TaskCard({
         {/* Task content */}
         <div className="flex-1">
           {isEditing ? (
-            <div className="flex items-center gap-2">
-              <input
-                ref={editInputRef}
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onBlur={saveEdit}
-                onKeyDown={handleEditKeyDown}
-                className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={cancelEdit}
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Cancel</span>
-              </Button>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={saveEdit}
+                  onKeyDown={handleEditKeyDown}
+                  className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={cancelEdit}
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Cancel</span>
+                </Button>
+              </div>
+              {/* Action buttons - second row on mobile only */}
+              {!isSubtask && onMoveHorizon && (
+                <div className="flex md:hidden items-center gap-1">
+                  {[
+                    { value: "now" as TimeHorizon, label: "7d" },
+                    { value: "soon" as TimeHorizon, label: "30d" },
+                    { value: "later" as TimeHorizon, label: "180d" },
+                    { value: "someday" as TimeHorizon, label: "∞" },
+                  ].map((option) => {
+                    const targetHorizonIndex = horizonOrder.indexOf(option.value)
+                    const steps = Math.abs(targetHorizonIndex - currentHorizonIndex)
+                    const direction = targetHorizonIndex < currentHorizonIndex ? "up" : "down"
+                    
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={async () => {
+                          // Move to target horizon by calling onMoveHorizon multiple times
+                          if (steps === 0) return
+                          for (let i = 0; i < steps; i++) {
+                            await onMoveHorizon(task, direction)
+                          }
+                        }}
+                        className={cn(
+                          "min-w-[2.25rem] rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                          task.time_horizon === option.value
+                            ? "border-primary bg-accent"
+                            : "border-border bg-background hover:border-muted-foreground/60"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => onDelete(task.id)}>
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete task</span>
+                  </Button>
+                </div>
+              )}
+              {isSubtask && (
+                <div className="flex md:hidden items-center gap-1 justify-end">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(task.id)}>
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete subtask</span>
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <button
@@ -248,14 +299,12 @@ export function TaskCard({
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* Action buttons - desktop: show on hover or when editing */}
         <div className={cn(
-          "flex items-center gap-1",
-          // On mobile: only show when editing
-          // On desktop: show on hover (showActions) or when editing
+          "hidden md:flex items-center gap-1",
           isEditing 
             ? "flex" 
-            : "hidden md:flex md:invisible md:group-hover:visible"
+            : "invisible md:group-hover:visible"
         )}>
             {onMoveUp && (
               <Button
