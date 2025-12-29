@@ -20,7 +20,7 @@ NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
 ## Authentication Flow
 - **Email/Password**: standard sign-up and sign-in.
 - **Google OAuth**: requires setting up a Google Cloud Project and adding the Client ID/Secret to your Supabase Auth settings.
-- **Middleware**: ensure `proxy.ts` is configured correctly to protect app routes.
+- **Middleware**: ensure `middleware.ts` is configured correctly to protect app routes.
 
 ## Key Screens
 - `/`: Landing page
