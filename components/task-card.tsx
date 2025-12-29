@@ -20,6 +20,7 @@ interface TaskCardProps {
   onAddSubtask?: (task: Task, title: string) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
+  onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
 }
 
 export function TaskCard({
@@ -36,6 +37,7 @@ export function TaskCard({
   onAddSubtask,
   canMoveUp = true,
   canMoveDown = true,
+  onDropOnTask,
 }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -45,6 +47,8 @@ export function TaskCard({
   const [subtaskTitle, setSubtaskTitle] = useState("")
   const editInputRef = useRef<HTMLInputElement | null>(null)
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
+  const lastTapRef = useRef<number>(0)
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -118,6 +122,68 @@ export function TaskCard({
     requestAnimationFrame(() => subtaskInputRef.current?.focus())
   }
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isEditing || isSubtask) return
+    
+    const touch = e.touches[0]
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // Track movement for drag detection
+    if (touchStartPosRef.current && e.touches[0]) {
+      const touch = e.touches[0]
+      const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x)
+      const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y)
+      
+      // If moved significantly, it's a drag, not a tap
+      if (deltaX > 10 || deltaY > 10) {
+        touchStartPosRef.current = null
+      }
+    }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isEditing || isSubtask) return
+    
+    // Check if this was a tap (not a drag)
+    if (touchStartPosRef.current) {
+      const currentTime = Date.now()
+      const tapLength = currentTime - lastTapRef.current
+      
+      // Double tap detection: two taps within 300ms and similar position
+      if (tapLength < 300 && tapLength > 0) {
+        e.preventDefault()
+        startEditing()
+        lastTapRef.current = 0 // Reset to prevent triple tap
+      } else {
+        lastTapRef.current = currentTime
+      }
+    }
+    
+    touchStartPosRef.current = null
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (isSubtask || !onDropOnTask) return
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (isSubtask || !onDropOnTask) return
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    // If dropped exactly on the task (within 5px of midpoint), default to insertBefore
+    const isExactlyOnTask = Math.abs(e.clientY - midpoint) < 5
+    const insertBefore = isExactlyOnTask || e.clientY < midpoint
+    
+    onDropOnTask(task, insertBefore)
+  }
+
   return (
     <div
       className={cn(
@@ -126,8 +192,14 @@ export function TaskCard({
         !isSubtask && "cursor-grab active:cursor-grabbing",
       )}
       draggable={!isSubtask}
+      style={{ touchAction: !isSubtask ? "manipulation" : "auto" }}
       onDragStart={() => !isSubtask && onDragStart(task)}
       onDragEnd={onDragEnd}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -184,7 +256,12 @@ export function TaskCard({
           ) : (
             <button
               type="button"
-              onClick={startEditing}
+              onClick={(e) => {
+                // On desktop, single click to edit. On mobile, double tap handles it.
+                if (!("ontouchstart" in window)) {
+                  startEditing()
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()

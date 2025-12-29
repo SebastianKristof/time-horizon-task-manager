@@ -48,7 +48,7 @@ export default async function HorizonsPage() {
           <Button size="sm" asChild>
             <Link href="/capture">
               <Plus className="h-4 w-4" />
-              Add Task
+              Bulk add tasks
             </Link>
           </Button>
         </div>

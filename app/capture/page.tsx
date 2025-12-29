@@ -31,7 +31,7 @@ export default async function CapturePage() {
       <main className="flex flex-1 items-start justify-center p-6 pt-16">
         <div className="w-full max-w-2xl">
           <div className="mb-12 flex flex-col gap-3 text-center">
-            <h1 className="text-4xl font-semibold tracking-tight text-balance">Capture a Task</h1>
+            <h1 className="text-4xl font-semibold tracking-tight text-balance">Capture Tasks</h1>
             <p className="text-lg text-muted-foreground text-pretty leading-relaxed">
               Quickly record what's on your mind and assign it to a time horizon
             </p>
