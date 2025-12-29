@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { HorizonsView } from "@/components/horizons-view"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { Plus, History } from "lucide-react"
 import type { Task } from "@/lib/types"
@@ -39,6 +40,7 @@ export default async function HorizonsPage() {
           <h1 className="text-xl font-semibold">Time Horizons</h1>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Button variant="outline" size="sm" asChild>
             <Link href="/retrospective">
               <History className="h-4 w-4" />

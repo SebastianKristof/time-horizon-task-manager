@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { RetrospectiveView } from "@/components/retrospective-view"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import type { Task } from "@/lib/types"
@@ -39,7 +40,7 @@ export default async function RetrospectivePage() {
           </Link>
         </Button>
         <h1 className="text-xl font-semibold">Retrospective</h1>
-        <div className="w-[100px]" />
+        <ThemeToggle />
       </header>
 
       {/* Main content */}
