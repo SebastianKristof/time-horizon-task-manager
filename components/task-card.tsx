@@ -65,7 +65,7 @@ export function TaskCard({
 
 
   const startEditing = () => {
-    if (isEditing) return
+    if (isEditing || task.completed) return // Don't allow editing completed tasks
     setOriginalTitle(task.title)
     setEditTitle(task.title)
     setIsEditing(true)
@@ -274,6 +274,7 @@ export function TaskCard({
             <button
               type="button"
               onClick={() => {
+                if (task.completed) return // Don't allow editing completed tasks
                 if (skipEditClickRef.current) {
                   skipEditClickRef.current = false
                   return
@@ -281,6 +282,7 @@ export function TaskCard({
                 startEditing()
               }}
               onKeyDown={(e) => {
+                if (task.completed) return // Don't allow editing completed tasks
                 if (e.key === "Enter") {
                   e.preventDefault()
                   startEditing()
@@ -288,7 +290,7 @@ export function TaskCard({
               }}
               className={cn(
                 "w-full text-left font-medium leading-tight text-foreground break-words",
-                task.completed && "text-muted-foreground",
+                task.completed && "text-muted-foreground cursor-default",
               )}
             >
               {task.title}
