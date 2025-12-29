@@ -299,12 +299,10 @@ export function TaskCard({
           )}
         </div>
 
-        {/* Action buttons - desktop: show on hover or when editing */}
+        {/* Action buttons - desktop only: show on hover (never show on mobile) */}
         <div className={cn(
           "hidden md:flex items-center gap-1",
-          isEditing 
-            ? "flex" 
-            : "invisible md:group-hover:visible"
+          !isEditing && "md:invisible md:group-hover:visible"
         )}>
             {onMoveUp && (
               <Button
