@@ -16,11 +16,14 @@ export default async function HorizonsPage() {
     redirect("/")
   }
 
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
   // Fetch all tasks for the user, ordered by time_horizon, parent_task_id (NULLS FIRST), then position
   const { data: tasks, error } = await supabase
     .from("tasks")
     .select("*")
     .eq("user_id", user.id)
+    .or(`completed.eq.false,and(completed.eq.true,completed_at.gte.${twentyFourHoursAgo})`)
     .order("time_horizon", { ascending: true })
     .order("position", { ascending: true })
 

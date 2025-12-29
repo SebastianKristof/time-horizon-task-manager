@@ -3,8 +3,8 @@
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Trash2, ChevronUp, ChevronDown, Pencil, MoveRight, Plus } from "lucide-react"
-import { useState } from "react"
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 
 interface TaskCardProps {
@@ -16,7 +16,7 @@ interface TaskCardProps {
   isSubtask?: boolean
   onMoveUp?: (task: Task) => void
   onMoveDown?: (task: Task) => void
-  onMoveHorizon?: (task: Task, horizon: TimeHorizon) => void
+  onMoveHorizon?: (task: Task, direction: "up" | "down") => void
   onEdit?: (task: Task, newTitle: string) => void
   onAddSubtask?: (task: Task, title: string) => void
   canMoveUp?: boolean
@@ -41,38 +41,89 @@ export function TaskCard({
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
+  const [originalTitle, setOriginalTitle] = useState(task.title)
   const [isAddingSubtask, setIsAddingSubtask] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState("")
+  const editInputRef = useRef<HTMLInputElement | null>(null)
+  const subtaskInputRef = useRef<HTMLInputElement | null>(null)
 
-  const handleEdit = () => {
-    if (isEditing && editTitle.trim() && onEdit) {
-      onEdit(task, editTitle.trim())
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
     }
-    setIsEditing(!isEditing)
+  }, [isEditing])
+
+  useEffect(() => {
+    if (!isEditing) {
+      setEditTitle(task.title)
+      setOriginalTitle(task.title)
+    }
+  }, [task.title, isEditing])
+
+  useEffect(() => {
+    if (isAddingSubtask && subtaskInputRef.current) {
+      subtaskInputRef.current.focus()
+    }
+  }, [isAddingSubtask])
+
+  const startEditing = () => {
+    if (isEditing) return
+    setOriginalTitle(task.title)
+    setEditTitle(task.title)
+    setIsEditing(true)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const saveEdit = () => {
+    const trimmed = editTitle.trim()
+    if (!trimmed) {
+      setEditTitle(originalTitle)
+      setIsEditing(false)
+      return
+    }
+    if (trimmed !== originalTitle && onEdit) {
+      onEdit(task, trimmed)
+    }
+    setIsEditing(false)
+  }
+
+  const cancelEdit = () => {
+    setEditTitle(originalTitle)
+    setIsEditing(false)
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleEdit()
+      saveEdit()
     } else if (e.key === "Escape") {
-      setEditTitle(task.title)
-      setIsEditing(false)
+      e.preventDefault()
+      cancelEdit()
     }
   }
 
-  const horizons: { value: TimeHorizon; label: string }[] = [
-    { value: "now", label: "7 days" },
-    { value: "soon", label: "30 days" },
-    { value: "later", label: "180 days" },
-    { value: "someday", label: "someday" },
-  ]
+  const horizonOrder: TimeHorizon[] = ["now", "soon", "later", "someday"]
+  const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
+  const canMoveHorizonUp = currentHorizonIndex > 0
+  const canMoveHorizonDown = currentHorizonIndex < horizonOrder.length - 1
+
+  const handleSubtaskCreate = (keepOpen: boolean) => {
+    const trimmed = subtaskTitle.trim()
+    if (!trimmed || !onAddSubtask) return
+    onAddSubtask(task, trimmed)
+    setSubtaskTitle("")
+    if (!keepOpen) {
+      setIsAddingSubtask(false)
+      return
+    }
+    requestAnimationFrame(() => subtaskInputRef.current?.focus())
+  }
 
   return (
     <div
       className={cn(
-        "group relative rounded-lg bg-card p-3 transition-all",
-        "hover:bg-accent/50",
+        "group relative rounded-md px-2 py-1.5 transition-colors",
+        "hover:bg-muted/30",
         task.completed && "opacity-60",
         !isSubtask && "cursor-grab active:cursor-grabbing",
       )}
@@ -82,13 +133,13 @@ export function TaskCard({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         {/* Checkbox */}
         <Checkbox
           checked={task.completed}
           onCheckedChange={() => onToggleComplete(task)}
           className={cn(
-            "size-5",
+            "mt-0.5 size-4",
             task.completed
               ? "border-green-600 bg-green-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 data-[state=checked]:text-white"
               : "border-muted-foreground/80 bg-card",
@@ -98,24 +149,55 @@ export function TaskCard({
         {/* Task content */}
         <div className="flex-1">
           {isEditing ? (
-            <input
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onBlur={handleEdit}
-              onKeyDown={handleKeyDown}
-              className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
-              autoFocus
-            />
+            <div className="flex items-center gap-2">
+              <input
+                ref={editInputRef}
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={saveEdit}
+                onKeyDown={handleEditKeyDown}
+                className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="h-7"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={saveEdit}
+              >
+                <Check className="h-4 w-4" />
+                Save
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={cancelEdit}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Cancel edit</span>
+              </Button>
+            </div>
           ) : (
-            <p
+            <button
+              type="button"
+              onClick={startEditing}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  startEditing()
+                }
+              }}
               className={cn(
-                "font-medium leading-tight",
-                task.completed && "line-through text-muted-foreground",
+                "w-full text-left font-medium leading-tight text-foreground transition-colors hover:underline",
+                task.completed && "text-muted-foreground",
               )}
             >
               {task.title}
-            </p>
+            </button>
           )}
           {task.description && !isEditing && (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{task.description}</p>
@@ -123,23 +205,59 @@ export function TaskCard({
           {isAddingSubtask && (
             <div className="mt-2 flex items-center gap-2">
               <input
+                ref={subtaskInputRef}
                 type="text"
                 value={subtaskTitle}
                 onChange={(e) => setSubtaskTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && subtaskTitle.trim() && onAddSubtask) {
-                    onAddSubtask(task, subtaskTitle.trim())
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    if (subtaskTitle.trim()) {
+                      handleSubtaskCreate(true)
+                    }
+                  } else if (e.key === "Escape") {
+                    e.preventDefault()
                     setSubtaskTitle("")
                     setIsAddingSubtask(false)
-                  } else if (e.key === "Escape") {
-                    setSubtaskTitle("")
+                  }
+                }}
+                onBlur={() => {
+                  if (subtaskTitle.trim()) {
+                    handleSubtaskCreate(false)
+                  } else {
                     setIsAddingSubtask(false)
                   }
                 }}
                 placeholder="Subtask title..."
                 className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
-                autoFocus
               />
+              <Button
+                type="button"
+                size="sm"
+                className="h-7"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  if (subtaskTitle.trim()) {
+                    handleSubtaskCreate(true)
+                  }
+                }}
+              >
+                Add
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setSubtaskTitle("")
+                  setIsAddingSubtask(false)
+                }}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Cancel subtask</span>
+              </Button>
             </div>
           )}
         </div>
@@ -155,8 +273,8 @@ export function TaskCard({
                 onClick={() => onMoveUp(task)}
                 disabled={!canMoveUp}
               >
-                <ChevronUp className="h-4 w-4" />
-                <span className="sr-only">Move up</span>
+                <ArrowUp className="h-4 w-4" />
+                <span className="sr-only">Move up in list</span>
               </Button>
             )}
             {!isSubtask && onMoveDown && (
@@ -167,15 +285,33 @@ export function TaskCard({
                 onClick={() => onMoveDown(task)}
                 disabled={!canMoveDown}
               >
-                <ChevronDown className="h-4 w-4" />
-                <span className="sr-only">Move down</span>
+                <ArrowDown className="h-4 w-4" />
+                <span className="sr-only">Move down in list</span>
               </Button>
             )}
-            {onEdit && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleEdit}>
-                <Pencil className="h-4 w-4" />
-                <span className="sr-only">Edit task</span>
-              </Button>
+            {!isSubtask && onMoveHorizon && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => onMoveHorizon(task, "up")}
+                  disabled={!canMoveHorizonUp}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                  <span className="sr-only">Move to earlier horizon</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => onMoveHorizon(task, "down")}
+                  disabled={!canMoveHorizonDown}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                  <span className="sr-only">Move to later horizon</span>
+                </Button>
+              </>
             )}
             {!isSubtask && onAddSubtask && (
               <Button
@@ -187,28 +323,6 @@ export function TaskCard({
                 <Plus className="h-4 w-4" />
                 <span className="sr-only">Add subtask</span>
               </Button>
-            )}
-            {!isSubtask && onMoveHorizon && (
-              <div className="relative group/horizon">
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  <MoveRight className="h-4 w-4" />
-                  <span className="sr-only">Move to horizon</span>
-                </Button>
-                <div className="absolute right-0 top-full z-10 mt-1 hidden rounded-md border bg-popover p-1 shadow-md group-hover/horizon:block">
-                  {horizons
-                    .filter((h) => h.value !== task.time_horizon)
-                    .map((horizon) => (
-                      <button
-                        key={horizon.value}
-                        type="button"
-                        onClick={() => onMoveHorizon(task, horizon.value)}
-                        className="block w-full rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-                      >
-                        {horizon.label}
-                      </button>
-                    ))}
-                </div>
-              </div>
             )}
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(task.id)}>
               <Trash2 className="h-4 w-4" />

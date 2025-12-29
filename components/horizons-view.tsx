@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
-import { Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Plus, X } from "lucide-react"
 
 interface HorizonsViewProps {
   initialTasks: Task[]
@@ -18,6 +19,7 @@ const horizons: { value: TimeHorizon; label: string; description: string }[] = [
   { value: "later", label: "180 days", description: "Next few months" },
   { value: "someday", label: "someday", description: "No timeline" },
 ]
+const horizonOrder: TimeHorizon[] = ["now", "soon", "later", "someday"]
 
 export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -27,6 +29,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     soon: "",
     later: "",
     someday: "",
+  })
+  const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
+  const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
+    now: null,
+    soon: null,
+    later: null,
+    someday: null,
   })
 
   useEffect(() => {
@@ -324,8 +333,11 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const handleMoveHorizon = async (task: Task, targetHorizon: TimeHorizon) => {
-    if (task.time_horizon === targetHorizon) return
+  const handleMoveHorizon = async (task: Task, direction: "up" | "down") => {
+    const currentIndex = horizonOrder.indexOf(task.time_horizon)
+    const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1
+    const targetHorizon = horizonOrder[nextIndex]
+    if (!targetHorizon || task.time_horizon === targetHorizon) return
 
     const supabase = createClient()
 
@@ -515,7 +527,8 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     <div className="mx-auto max-w-3xl">
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
-        if (horizonTasks.length === 0) return null
+        const hasInputValue = Boolean(newTaskInputs[horizon.value].trim())
+        const isFocused = focusedHorizon === horizon.value
 
         return (
           <div key={horizon.value} className="mb-8">
@@ -525,8 +538,8 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             </div>
 
             {/* Task list */}
-            <div className="flex flex-col gap-2">
-              {horizonTasks.map((task, index) => {
+            <div className="flex flex-col gap-1.5">
+              {horizonTasks.map((task) => {
                 const isSubtask = task.parent_task_id !== null
                 const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
                 const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
@@ -555,7 +568,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
               })}
 
               {/* Inline task creation */}
-              <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-card p-2">
+              <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-card/50 px-2 py-1.5">
                 <Plus className="h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
@@ -564,13 +577,67 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                   onChange={(e) =>
                     setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: e.target.value }))
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newTaskInputs[horizon.value].trim()) {
+                  onFocus={() => setFocusedHorizon(horizon.value)}
+                  onBlur={() => {
+                    if (newTaskInputs[horizon.value].trim()) {
                       handleCreateTask(horizon.value, newTaskInputs[horizon.value])
+                    } else {
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                    }
+                    setFocusedHorizon(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      if (newTaskInputs[horizon.value].trim()) {
+                        handleCreateTask(horizon.value, newTaskInputs[horizon.value])
+                        requestAnimationFrame(() => inputRefs.current[horizon.value]?.focus())
+                      }
+                    } else if (e.key === "Escape") {
+                      e.preventDefault()
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                      setFocusedHorizon(null)
+                      inputRefs.current[horizon.value]?.blur()
                     }
                   }}
                   className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+                  ref={(element) => {
+                    inputRefs.current[horizon.value] = element
+                  }}
                 />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (newTaskInputs[horizon.value].trim()) {
+                      handleCreateTask(horizon.value, newTaskInputs[horizon.value])
+                      requestAnimationFrame(() => inputRefs.current[horizon.value]?.focus())
+                    } else {
+                      inputRefs.current[horizon.value]?.focus()
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+                {(isFocused || hasInputValue) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                      setFocusedHorizon(null)
+                      inputRefs.current[horizon.value]?.blur()
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Cancel</span>
+                  </Button>
+                )}
               </div>
             </div>
           </div>

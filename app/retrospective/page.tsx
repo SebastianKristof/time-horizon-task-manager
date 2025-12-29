@@ -16,12 +16,15 @@ export default async function RetrospectivePage() {
     redirect("/")
   }
 
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
   // Fetch completed tasks
   const { data: completedTasks, error } = await supabase
     .from("tasks")
     .select("*")
     .eq("user_id", user.id)
     .eq("completed", true)
+    .or(`completed_at.is.null,completed_at.lte.${twentyFourHoursAgo}`)
     .order("completed_at", { ascending: false })
 
   if (error) {
