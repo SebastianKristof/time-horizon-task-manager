@@ -157,11 +157,10 @@ export function TaskCard({
         task.completed && "opacity-60",
         "cursor-grab active:cursor-grabbing",
       )}
-      draggable={!isSubtask}
+      draggable
       style={{ touchAction: "manipulation" }}
       onDragStart={(e) => {
-        if (isSubtask) return
-        if (lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
+        if (lastPointerTypeRef.current && lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
           e.preventDefault()
           return
         }
@@ -250,7 +249,14 @@ export function TaskCard({
         </div>
 
         {/* Action buttons */}
-        <div className={cn("flex items-center gap-1", (!showActions || isEditing) && "invisible")}>
+        <div className={cn(
+          "flex items-center gap-1",
+          // On mobile: only show when editing
+          // On desktop: show on hover (showActions) or when editing
+          isEditing 
+            ? "flex" 
+            : "hidden md:flex md:invisible md:group-hover:visible"
+        )}>
             {onMoveUp && (
               <Button
                 variant="ghost"
