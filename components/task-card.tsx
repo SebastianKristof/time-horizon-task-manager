@@ -21,6 +21,8 @@ interface TaskCardProps {
   canMoveUp?: boolean
   canMoveDown?: boolean
   onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
+  onDragOverTask?: (targetTask: Task, insertBefore: boolean) => void
+  draggedTask?: Task | null
 }
 
 export function TaskCard({
@@ -38,6 +40,8 @@ export function TaskCard({
   canMoveUp = true,
   canMoveDown = true,
   onDropOnTask,
+  onDragOverTask,
+  draggedTask,
 }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -131,9 +135,22 @@ export function TaskCard({
   }
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (!onDropOnTask) return
+    if (!onDropOnTask || !draggedTask || draggedTask.id === task.id) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
+    
+    // Determine if we should insert before or after
+    const rect = e.currentTarget.getBoundingClientRect()
+    const midpoint = rect.top + rect.height / 2
+    const insertBefore = e.clientY < midpoint
+    
+    if (onDragOverTask) {
+      onDragOverTask(task, insertBefore)
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -164,6 +181,33 @@ export function TaskCard({
           e.preventDefault()
           return
         }
+        
+        // Create a custom drag image that appears on the right side
+        const dragImage = document.createElement("div")
+        dragImage.style.position = "absolute"
+        dragImage.style.top = "-1000px"
+        dragImage.style.left = "-1000px"
+        dragImage.style.width = "200px"
+        dragImage.style.padding = "8px 12px"
+        dragImage.style.backgroundColor = "hsl(var(--background))"
+        dragImage.style.border = "1px solid hsl(var(--border))"
+        dragImage.style.borderRadius = "6px"
+        dragImage.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
+        dragImage.style.fontSize = "14px"
+        dragImage.style.fontWeight = "500"
+        dragImage.style.color = "hsl(var(--foreground))"
+        dragImage.textContent = task.title
+        document.body.appendChild(dragImage)
+        
+        // Set the drag image offset to the right (positive x offset)
+        // This makes it appear to the right of the cursor/finger
+        e.dataTransfer.setDragImage(dragImage, 20, 10)
+        
+        // Clean up after a short delay
+        setTimeout(() => {
+          document.body.removeChild(dragImage)
+        }, 0)
+        
         onDragStart(task)
       }}
       onDragEnd={() => {

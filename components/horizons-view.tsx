@@ -7,6 +7,7 @@ import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Plus, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
   initialTasks: Task[]
@@ -34,6 +35,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{ taskId: string; insertBefore: boolean } | null>(null)
   const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
     now: null,
     soon: null,
@@ -138,11 +140,51 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   const handleDragEnd = () => {
     setDraggedTask(null)
+    setDropIndicator(null)
+    lastDropIndicatorRef.current = null
+  }
+
+  const lastDropIndicatorRef = useRef<{ taskId: string; insertBefore: boolean } | null>(null)
+
+  const handleDragOverTask = (targetTask: Task, insertBefore: boolean) => {
+    if (!draggedTask || draggedTask.id === targetTask.id) {
+      setDropIndicator(null)
+      lastDropIndicatorRef.current = null
+      return
+    }
+
+    // Check if this is a valid drop target
+    const isValidDrop = 
+      // Subtask reordering: both must be subtasks of same parent
+      (draggedTask.parent_task_id !== null && targetTask.parent_task_id !== null && 
+       draggedTask.parent_task_id === targetTask.parent_task_id) ||
+      // Top-level task reordering: both must be top-level
+      (draggedTask.parent_task_id === null && targetTask.parent_task_id === null)
+
+    if (isValidDrop) {
+      const newIndicator = { taskId: targetTask.id, insertBefore }
+      // Only trigger haptic feedback when entering a new valid drop zone
+      const hasChanged = 
+        !lastDropIndicatorRef.current ||
+        lastDropIndicatorRef.current.taskId !== newIndicator.taskId ||
+        lastDropIndicatorRef.current.insertBefore !== newIndicator.insertBefore
+      
+      if (hasChanged && 'vibrate' in navigator) {
+        navigator.vibrate(10) // Short vibration
+      }
+      
+      setDropIndicator(newIndicator)
+      lastDropIndicatorRef.current = newIndicator
+    } else {
+      setDropIndicator(null)
+      lastDropIndicatorRef.current = null
+    }
   }
 
   const handleDropOnTask = async (targetTask: Task, insertBefore: boolean) => {
     if (!draggedTask || draggedTask.id === targetTask.id) {
       setDraggedTask(null)
+      setDropIndicator(null)
       return
     }
 
@@ -152,10 +194,12 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         // Both are subtasks of the same parent - allow reordering
         await handleReorderSubtasks(draggedTask, targetTask, insertBefore)
         setDraggedTask(null)
+        setDropIndicator(null)
         return
       } else {
         // Different parents - don't allow
         setDraggedTask(null)
+        setDropIndicator(null)
         return
       }
     }
@@ -163,6 +207,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     // Only allow reordering top-level tasks with top-level tasks
     if (draggedTask.parent_task_id !== null || targetTask.parent_task_id !== null) {
       setDraggedTask(null)
+      setDropIndicator(null)
       return
     }
 
@@ -170,11 +215,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     if (draggedTask.time_horizon === targetTask.time_horizon) {
       await handleReorderWithinHorizon(draggedTask, targetTask, insertBefore)
       setDraggedTask(null)
+      setDropIndicator(null)
       return
     }
 
     // Different horizon - move to new horizon at specific position
     await handleDropToHorizonAtPosition(targetTask.time_horizon, targetTask, insertBefore)
+    setDropIndicator(null)
   }
 
   const handleReorderSubtasks = async (draggedTask: Task, targetTask: Task, insertBefore: boolean) => {
@@ -441,6 +488,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const handleDrop = async (targetHorizon: TimeHorizon) => {
     if (!draggedTask || draggedTask.time_horizon === targetHorizon) {
       setDraggedTask(null)
+      setDropIndicator(null)
       return
     }
 
@@ -898,6 +946,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                 if (draggedTask) {
                   handleDrop(horizon.value)
                 }
+                setDropIndicator(null)
               }}
             >
               {horizonTasks.map((task, taskIndex) => {
@@ -942,8 +991,14 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                   }
                 }
 
+                const showDropIndicatorAbove = dropIndicator?.taskId === task.id && dropIndicator.insertBefore
+                const showDropIndicatorBelow = dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
+
                 return (
                   <div key={task.id}>
+                    {showDropIndicatorAbove && (
+                      <div className={cn("h-0.5 bg-primary rounded-full", isSubtask ? "ml-6" : "")} />
+                    )}
                     <div className={isSubtask ? "ml-6" : ""}>
                       <TaskCard
                         task={task}
@@ -963,8 +1018,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         canMoveUp={canMoveUp}
                         canMoveDown={canMoveDown}
                         onDropOnTask={handleDropOnTask}
+                        onDragOverTask={handleDragOverTask}
+                        draggedTask={draggedTask}
                       />
                     </div>
+                    {showDropIndicatorBelow && (
+                      <div className={cn("h-0.5 bg-primary rounded-full", isSubtask ? "ml-6" : "")} />
+                    )}
                     {showSubtaskInput && (
                       <div className="ml-6 mt-1 flex items-center gap-2">
                         <input
