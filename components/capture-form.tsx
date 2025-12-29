@@ -5,7 +5,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { TimeHorizon } from "@/lib/types"
@@ -15,15 +14,14 @@ interface CaptureFormProps {
 }
 
 const horizons: { value: TimeHorizon; label: string; description: string }[] = [
-  { value: "now", label: "Now", description: "Do today or this week" },
-  { value: "soon", label: "Soon", description: "Do in the next few weeks" },
-  { value: "later", label: "Later", description: "Do in the next few months" },
-  { value: "someday", label: "Someday", description: "No specific timeline" },
+  { value: "now", label: "7 days", description: "Do today or this week" },
+  { value: "soon", label: "30 days", description: "Do in the next few weeks" },
+  { value: "later", label: "180 days", description: "Do in the next few months" },
+  { value: "someday", label: "someday", description: "No specific timeline" },
 ]
 
 export function CaptureForm({ userId }: CaptureFormProps) {
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
+  const [tasksText, setTasksText] = useState("")
   const [selectedHorizon, setSelectedHorizon] = useState<TimeHorizon>("now")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,31 +29,56 @@ export function CaptureForm({ userId }: CaptureFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return
+    
+    // Parse tasks from newline-separated text
+    const taskTitles = tasksText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+
+    if (taskTitles.length === 0) return
 
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
     try {
-      const { error: insertError } = await supabase.from("tasks").insert({
+      // Fetch current max position for the selected horizon to determine starting position
+      const { data: existingTasks } = await supabase
+        .from("tasks")
+        .select("position")
+        .eq("user_id", userId)
+        .eq("time_horizon", selectedHorizon)
+        .is("parent_task_id", null)
+        .order("position", { ascending: false })
+        .limit(1)
+
+      const maxPosition = existingTasks && existingTasks.length > 0 ? existingTasks[0].position : -1
+      const startingPosition = maxPosition + 1
+
+      // Create tasks array with positions
+      const tasksToInsert = taskTitles.map((title, index) => ({
         user_id: userId,
-        title: title.trim(),
-        description: description.trim() || null,
+        title,
+        description: null,
         time_horizon: selectedHorizon,
         completed: false,
-      })
+        parent_task_id: null,
+        position: startingPosition + index,
+      }))
+
+      // Batch insert
+      const { error: insertError } = await supabase.from("tasks").insert(tasksToInsert)
 
       if (insertError) throw insertError
 
       // Reset form and redirect
-      setTitle("")
-      setDescription("")
+      setTasksText("")
       setSelectedHorizon("now")
       router.push("/horizons")
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create task")
+      setError(err instanceof Error ? err.message : "Failed to create tasks")
     } finally {
       setIsLoading(false)
     }
@@ -63,40 +86,29 @@ export function CaptureForm({ userId }: CaptureFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-      {/* Title input */}
+      {/* Tasks textarea */}
       <div className="flex flex-col gap-3">
-        <Label htmlFor="title" className="text-base">
-          What needs to be done?
-        </Label>
-        <Input
-          id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Enter task title"
-          required
-          className="text-lg"
-          autoFocus
-        />
-      </div>
-
-      {/* Description textarea */}
-      <div className="flex flex-col gap-3">
-        <Label htmlFor="description" className="text-base">
-          Additional details (optional)
+        <Label htmlFor="tasks" className="text-base">
+          What needs to be done? (one task per line)
         </Label>
         <Textarea
-          id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Add any notes or context"
-          rows={4}
-          className="resize-none"
+          id="tasks"
+          value={tasksText}
+          onChange={(e) => setTasksText(e.target.value)}
+          placeholder="Enter tasks, one per line&#10;Task 1&#10;Task 2&#10;Task 3"
+          rows={8}
+          className="resize-none text-base"
+          required
+          autoFocus
         />
+        <p className="text-sm text-muted-foreground">
+          Type multiple tasks, each on a new line. They will all be assigned to the same time horizon.
+        </p>
       </div>
 
       {/* Time horizon selection */}
       <div className="flex flex-col gap-4">
-        <Label className="text-base">When should this be done?</Label>
+        <Label className="text-base">Time horizon for all tasks</Label>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {horizons.map((horizon) => (
             <button
@@ -120,10 +132,16 @@ export function CaptureForm({ userId }: CaptureFormProps) {
 
       {/* Action buttons */}
       <div className="flex gap-3">
-        <Button type="submit" size="lg" className="flex-1" disabled={isLoading || !title.trim()}>
-          {isLoading ? "Creating..." : "Create Task"}
+        <Button type="submit" size="lg" className="flex-1" disabled={isLoading || !tasksText.trim()}>
+          {isLoading ? "Creating..." : "Add Tasks"}
         </Button>
-        <Button type="button" size="lg" variant="outline" onClick={() => router.push("/horizons")} disabled={isLoading}>
+        <Button
+          type="button"
+          size="lg"
+          variant="outline"
+          onClick={() => router.push("/horizons")}
+          disabled={isLoading}
+        >
           Cancel
         </Button>
       </div>

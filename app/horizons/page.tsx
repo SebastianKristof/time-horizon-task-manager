@@ -16,12 +16,13 @@ export default async function HorizonsPage() {
     redirect("/")
   }
 
-  // Fetch all tasks for the user
+  // Fetch all tasks for the user, ordered by time_horizon, parent_task_id (NULLS FIRST), then position
   const { data: tasks, error } = await supabase
     .from("tasks")
     .select("*")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+    .order("time_horizon", { ascending: true })
+    .order("position", { ascending: true })
 
   if (error) {
     console.error("[v0] Error fetching tasks:", error)

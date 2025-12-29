@@ -4,43 +4,43 @@ overview: Redesign the main horizons view into a single-column list with improve
 todos:
   - id: db-migration
     content: Create migration script to add position and parent_task_id fields to tasks table
-    status: pending
+    status: completed
   - id: update-types
     content: Update Task interface in lib/types.ts to include position and parent_task_id
-    status: pending
+    status: completed
   - id: horizon-labels
     content: Update horizon labels from 'now/soon/later' to '7 days/30 days/180 days' in components
-    status: pending
+    status: completed
   - id: refactor-horizons-layout
     content: Transform horizons-view.tsx from grid to single-column list layout with section headings
-    status: pending
+    status: completed
   - id: update-queries
     content: Update database queries to order by position and include parent_task_id
-    status: pending
+    status: completed
   - id: task-card-redesign
     content: "Redesign TaskCard component: remove borders, add action buttons (up/down/delete/move/edit)"
-    status: pending
+    status: completed
   - id: implement-ordering
     content: Implement task reordering logic with position field updates
-    status: pending
+    status: completed
   - id: completed-styling
     content: Style completed tasks with strikethrough, grey color, and green checkmarks
-    status: pending
+    status: completed
   - id: subtask-support
     content: Add subtask rendering, creation, and ensure they move with parent tasks
-    status: pending
+    status: completed
   - id: inline-editing
     content: Implement inline task title editing functionality
-    status: pending
+    status: completed
   - id: inline-creation
     content: Add inline task creation inputs at end of each horizon section
-    status: pending
+    status: completed
   - id: retrospective-refactor
     content: Refactor retrospective view to show monthly groupings in descending order
-    status: pending
+    status: completed
   - id: capture-form-simplify
     content: Simplify capture form to multi-line textarea with batch task creation
-    status: pending
+    status: completed
 ---
 
 # Horizon View Redesign and Enhancements

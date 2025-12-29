@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task, TimeHorizon } from "@/lib/types"
-import { HorizonColumn } from "@/components/horizon-column"
 import { TaskCard } from "@/components/task-card"
+import { Input } from "@/components/ui/input"
+import { Plus } from "lucide-react"
 
 interface HorizonsViewProps {
   initialTasks: Task[]
@@ -12,15 +13,21 @@ interface HorizonsViewProps {
 }
 
 const horizons: { value: TimeHorizon; label: string; description: string }[] = [
-  { value: "now", label: "Now", description: "This week" },
-  { value: "soon", label: "Soon", description: "Next few weeks" },
-  { value: "later", label: "Later", description: "Next few months" },
-  { value: "someday", label: "Someday", description: "No timeline" },
+  { value: "now", label: "7 days", description: "This week" },
+  { value: "soon", label: "30 days", description: "Next few weeks" },
+  { value: "later", label: "180 days", description: "Next few months" },
+  { value: "someday", label: "someday", description: "No timeline" },
 ]
 
 export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
+  const [newTaskInputs, setNewTaskInputs] = useState<Record<TimeHorizon, string>>({
+    now: "",
+    soon: "",
+    later: "",
+    someday: "",
+  })
 
   useEffect(() => {
     const supabase = createClient()
@@ -34,7 +41,14 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         (payload) => {
           console.log("[v0] Real-time update:", payload)
           if (payload.eventType === "INSERT") {
-            setTasks((prev) => [payload.new as Task, ...prev])
+            setTasks((prev) => {
+              const newTask = payload.new as Task
+              // Check if task already exists (avoid duplicates)
+              if (prev.some((t) => t.id === newTask.id)) {
+                return prev
+              }
+              return [...prev, newTask]
+            })
           } else if (payload.eventType === "UPDATE") {
             setTasks((prev) => prev.map((task) => (task.id === payload.new.id ? (payload.new as Task) : task)))
           } else if (payload.eventType === "DELETE") {
@@ -56,6 +70,50 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }, [userId])
 
+  // Organize tasks by horizon, then by parent_task_id (NULLS FIRST), then by position
+  const organizedTasks = useMemo(() => {
+    const result: Record<TimeHorizon, Task[]> = {
+      now: [],
+      soon: [],
+      later: [],
+      someday: [],
+    }
+
+    horizons.forEach((horizon) => {
+      const horizonTasks = tasks.filter((task) => task.time_horizon === horizon.value)
+      
+      // Separate top-level tasks from subtasks
+      const topLevelTasks = horizonTasks.filter((task) => !task.parent_task_id)
+      const subtasks = horizonTasks.filter((task) => task.parent_task_id)
+
+      // Sort top-level tasks by position
+      topLevelTasks.sort((a, b) => a.position - b.position)
+
+      // Sort subtasks by parent_task_id, then by position
+      subtasks.sort((a, b) => {
+        if (a.parent_task_id !== b.parent_task_id) {
+          return (a.parent_task_id || "").localeCompare(b.parent_task_id || "")
+        }
+        return a.position - b.position
+      })
+
+      // Build ordered list: top-level task, then its subtasks, then next top-level task, etc.
+      const ordered: Task[] = []
+      
+      for (const topLevelTask of topLevelTasks) {
+        ordered.push(topLevelTask)
+        // Find all subtasks for this parent
+        const children = subtasks.filter((st) => st.parent_task_id === topLevelTask.id)
+        children.sort((a, b) => a.position - b.position)
+        ordered.push(...children)
+      }
+
+      result[horizon.value] = ordered
+    })
+
+    return result
+  }, [tasks])
+
   const handleDragStart = (task: Task) => {
     setDraggedTask(task)
   }
@@ -72,20 +130,42 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     const supabase = createClient()
 
+    // If moving a parent task, also move all its subtasks
+    const tasksToMove = draggedTask.parent_task_id === null
+      ? [draggedTask, ...tasks.filter((t) => t.parent_task_id === draggedTask.id)]
+      : [draggedTask]
+
     // Optimistic update
     setTasks((prev) =>
-      prev.map((task) => (task.id === draggedTask.id ? { ...task, time_horizon: targetHorizon } : task)),
+      prev.map((task) => {
+        if (tasksToMove.some((tm) => tm.id === task.id)) {
+          return { ...task, time_horizon: targetHorizon }
+        }
+        return task
+      }),
     )
 
     try {
-      const { error } = await supabase.from("tasks").update({ time_horizon: targetHorizon }).eq("id", draggedTask.id)
+      // Update all tasks in batch
+      for (const taskToMove of tasksToMove) {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ time_horizon: targetHorizon })
+          .eq("id", taskToMove.id)
 
-      if (error) throw error
+        if (error) throw error
+      }
     } catch (err) {
       console.error("[v0] Error updating task horizon:", err)
       // Revert optimistic update on error
       setTasks((prev) =>
-        prev.map((task) => (task.id === draggedTask.id ? { ...task, time_horizon: draggedTask.time_horizon } : task)),
+        prev.map((task) => {
+          const originalTask = tasksToMove.find((tm) => tm.id === task.id)
+          if (originalTask) {
+            return { ...task, time_horizon: originalTask.time_horizon }
+          }
+          return task
+        }),
       )
     }
 
@@ -125,8 +205,8 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const handleDelete = async (taskId: string) => {
     const supabase = createClient()
 
-    // Optimistic update
-    setTasks((prev) => prev.filter((task) => task.id !== taskId))
+    // Optimistic update (cascade delete will handle subtasks)
+    setTasks((prev) => prev.filter((task) => task.id !== taskId && task.parent_task_id !== taskId))
 
     try {
       const { error } = await supabase.from("tasks").delete().eq("id", taskId)
@@ -138,37 +218,364 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  // Group tasks by horizon
-  const tasksByHorizon = horizons.reduce(
-    (acc, horizon) => {
-      acc[horizon.value] = tasks.filter((task) => task.time_horizon === horizon.value)
-      return acc
-    },
-    {} as Record<TimeHorizon, Task[]>,
-  )
+  const handleMoveUp = async (task: Task) => {
+    if (task.parent_task_id !== null) return // Only top-level tasks can be reordered
+
+    const supabase = createClient()
+    const topLevelTasks = tasks.filter(
+      (t) => t.time_horizon === task.time_horizon && t.parent_task_id === null,
+    )
+    topLevelTasks.sort((a, b) => a.position - b.position)
+
+    const currentIndex = topLevelTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex <= 0) return // Already at top
+
+    const previousTask = topLevelTasks[currentIndex - 1]
+    const newPosition = previousTask.position
+    const oldPosition = task.position
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === task.id) return { ...t, position: newPosition }
+        if (t.id === previousTask.id) return { ...t, position: oldPosition }
+        return t
+      }),
+    )
+
+    try {
+      // Swap positions
+      const { error: error1 } = await supabase
+        .from("tasks")
+        .update({ position: newPosition })
+        .eq("id", task.id)
+
+      if (error1) throw error1
+
+      const { error: error2 } = await supabase
+        .from("tasks")
+        .update({ position: oldPosition })
+        .eq("id", previousTask.id)
+
+      if (error2) throw error2
+    } catch (err) {
+      console.error("[v0] Error moving task up:", err)
+      // Revert
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === task.id) return { ...t, position: oldPosition }
+          if (t.id === previousTask.id) return { ...t, position: newPosition }
+          return t
+        }),
+      )
+    }
+  }
+
+  const handleMoveDown = async (task: Task) => {
+    if (task.parent_task_id !== null) return // Only top-level tasks can be reordered
+
+    const supabase = createClient()
+    const topLevelTasks = tasks.filter(
+      (t) => t.time_horizon === task.time_horizon && t.parent_task_id === null,
+    )
+    topLevelTasks.sort((a, b) => a.position - b.position)
+
+    const currentIndex = topLevelTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex < 0 || currentIndex >= topLevelTasks.length - 1) return // Already at bottom
+
+    const nextTask = topLevelTasks[currentIndex + 1]
+    const newPosition = nextTask.position
+    const oldPosition = task.position
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === task.id) return { ...t, position: newPosition }
+        if (t.id === nextTask.id) return { ...t, position: oldPosition }
+        return t
+      }),
+    )
+
+    try {
+      // Swap positions
+      const { error: error1 } = await supabase
+        .from("tasks")
+        .update({ position: newPosition })
+        .eq("id", task.id)
+
+      if (error1) throw error1
+
+      const { error: error2 } = await supabase
+        .from("tasks")
+        .update({ position: oldPosition })
+        .eq("id", nextTask.id)
+
+      if (error2) throw error2
+    } catch (err) {
+      console.error("[v0] Error moving task down:", err)
+      // Revert
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id === task.id) return { ...t, position: oldPosition }
+          if (t.id === nextTask.id) return { ...t, position: newPosition }
+          return t
+        }),
+      )
+    }
+  }
+
+  const handleMoveHorizon = async (task: Task, targetHorizon: TimeHorizon) => {
+    if (task.time_horizon === targetHorizon) return
+
+    const supabase = createClient()
+
+    // If moving a parent task, also move all its subtasks
+    const tasksToMove = task.parent_task_id === null
+      ? [task, ...tasks.filter((t) => t.parent_task_id === task.id)]
+      : [task]
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (tasksToMove.some((tm) => tm.id === t.id)) {
+          return { ...t, time_horizon: targetHorizon }
+        }
+        return t
+      }),
+    )
+
+    try {
+      // Update all tasks in batch
+      for (const taskToMove of tasksToMove) {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ time_horizon: targetHorizon })
+          .eq("id", taskToMove.id)
+
+        if (error) throw error
+      }
+    } catch (err) {
+      console.error("[v0] Error moving task to horizon:", err)
+      // Revert
+      setTasks((prev) =>
+        prev.map((t) => {
+          const originalTask = tasksToMove.find((tm) => tm.id === t.id)
+          if (originalTask) {
+            return { ...t, time_horizon: originalTask.time_horizon }
+          }
+          return t
+        }),
+      )
+    }
+  }
+
+  const handleEdit = async (task: Task, newTitle: string) => {
+    if (newTitle.trim() === task.title) return
+
+    const supabase = createClient()
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, title: newTitle.trim() } : t)),
+    )
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ title: newTitle.trim() })
+        .eq("id", task.id)
+
+      if (error) throw error
+    } catch (err) {
+      console.error("[v0] Error updating task title:", err)
+      // Revert
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? task : t)),
+      )
+    }
+  }
+
+  const handleAddSubtask = async (parentTask: Task, title: string) => {
+    if (!title.trim()) return
+
+    const supabase = createClient()
+
+    // Get the highest position for subtasks of this parent
+    const existingSubtasks = tasks.filter((t) => t.parent_task_id === parentTask.id)
+    const maxPosition = existingSubtasks.length > 0
+      ? Math.max(...existingSubtasks.map((t) => t.position))
+      : -1
+    const newPosition = maxPosition + 1
+
+    const newSubtask: Task = {
+      id: crypto.randomUUID(), // Temporary ID
+      user_id: userId,
+      title: title.trim(),
+      description: null,
+      time_horizon: parentTask.time_horizon,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      position: newPosition,
+      parent_task_id: parentTask.id,
+    }
+
+    // Optimistic update
+    setTasks((prev) => [...prev, newSubtask])
+
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          user_id: userId,
+          title: title.trim(),
+          description: null,
+          time_horizon: parentTask.time_horizon,
+          completed: false,
+          parent_task_id: parentTask.id,
+          position: newPosition,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Update with real ID from server
+      setTasks((prev) =>
+        prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t)),
+      )
+    } catch (err) {
+      console.error("[v0] Error creating subtask:", err)
+      // Revert
+      setTasks((prev) => prev.filter((t) => t.id !== newSubtask.id))
+    }
+  }
+
+  const handleCreateTask = async (horizon: TimeHorizon, title: string) => {
+    if (!title.trim()) return
+
+    const supabase = createClient()
+
+    // Get the highest position for top-level tasks in this horizon
+    const topLevelTasks = tasks.filter((t) => t.time_horizon === horizon && !t.parent_task_id)
+    const maxPosition = topLevelTasks.length > 0
+      ? Math.max(...topLevelTasks.map((t) => t.position))
+      : -1
+    const newPosition = maxPosition + 1
+
+    const newTask: Task = {
+      id: crypto.randomUUID(), // Temporary ID
+      user_id: userId,
+      title: title.trim(),
+      description: null,
+      time_horizon: horizon,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      position: newPosition,
+      parent_task_id: null,
+    }
+
+    // Optimistic update
+    setTasks((prev) => [...prev, newTask])
+    setNewTaskInputs((prev) => ({ ...prev, [horizon]: "" }))
+
+    try {
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          user_id: userId,
+          title: title.trim(),
+          description: null,
+          time_horizon: horizon,
+          completed: false,
+          parent_task_id: null,
+          position: newPosition,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Update with real ID from server
+      setTasks((prev) =>
+        prev.map((t) => (t.id === newTask.id ? (data as Task) : t)),
+      )
+    } catch (err) {
+      console.error("[v0] Error creating task:", err)
+      // Revert
+      setTasks((prev) => prev.filter((t) => t.id !== newTask.id))
+      setNewTaskInputs((prev) => ({ ...prev, [horizon]: title.trim() }))
+    }
+  }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {horizons.map((horizon) => (
-        <HorizonColumn
-          key={horizon.value}
-          horizon={horizon}
-          tasks={tasksByHorizon[horizon.value]}
-          onDrop={handleDrop}
-          isDragging={draggedTask !== null}
-        >
-          {tasksByHorizon[horizon.value].map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onToggleComplete={handleToggleComplete}
-              onDelete={handleDelete}
-            />
-          ))}
-        </HorizonColumn>
-      ))}
+    <div className="mx-auto max-w-3xl">
+      {horizons.map((horizon) => {
+        const horizonTasks = organizedTasks[horizon.value]
+        if (horizonTasks.length === 0) return null
+
+        return (
+          <div key={horizon.value} className="mb-8">
+            {/* Section heading */}
+            <div className="mb-4 border-b border-border pb-2">
+              <h2 className="text-xl font-semibold">{horizon.label}</h2>
+            </div>
+
+            {/* Task list */}
+            <div className="flex flex-col gap-2">
+              {horizonTasks.map((task, index) => {
+                const isSubtask = task.parent_task_id !== null
+                const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
+                const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
+                const canMoveUp = !isSubtask && currentTopLevelIndex > 0
+                const canMoveDown = !isSubtask && currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
+
+                return (
+                  <div key={task.id} className={isSubtask ? "ml-6" : ""}>
+                    <TaskCard
+                      task={task}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onToggleComplete={handleToggleComplete}
+                      onDelete={handleDelete}
+                      isSubtask={isSubtask}
+                      onMoveUp={handleMoveUp}
+                      onMoveDown={handleMoveDown}
+                      onMoveHorizon={handleMoveHorizon}
+                      onEdit={handleEdit}
+                      onAddSubtask={handleAddSubtask}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                    />
+                  </div>
+                )
+              })}
+
+              {/* Inline task creation */}
+              <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-card p-2">
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Add a task..."
+                  value={newTaskInputs[horizon.value]}
+                  onChange={(e) =>
+                    setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: e.target.value }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newTaskInputs[horizon.value].trim()) {
+                      handleCreateTask(horizon.value, newTaskInputs[horizon.value])
+                    }
+                  }}
+                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+                />
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

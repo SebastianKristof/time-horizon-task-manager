@@ -10,6 +10,8 @@ export interface Task {
   completed_at: string | null
   created_at: string
   updated_at: string
+  position: number
+  parent_task_id: string | null
 }
 
 export interface Snapshot {
