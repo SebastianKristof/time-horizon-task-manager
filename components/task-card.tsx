@@ -146,13 +146,13 @@ export function TaskCard({
   }
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (isSubtask || !onDropOnTask) return
+    if (!onDropOnTask) return
     e.preventDefault()
     e.stopPropagation()
   }
 
   const handleDrop = (e: React.DragEvent) => {
-    if (isSubtask || !onDropOnTask) return
+    if (!onDropOnTask) return
     e.preventDefault()
     e.stopPropagation()
     
@@ -170,11 +170,11 @@ export function TaskCard({
       className={cn(
         "group relative rounded-md px-2 py-0.5 bg-transparent transition-colors hover:bg-accent/30",
         task.completed && "opacity-60",
-        !isSubtask && "cursor-grab active:cursor-grabbing",
+        "cursor-grab active:cursor-grabbing",
       )}
-      draggable={!isSubtask}
-      style={{ touchAction: !isSubtask ? "manipulation" : "auto" }}
-      onDragStart={() => !isSubtask && onDragStart(task)}
+      draggable
+      style={{ touchAction: "manipulation" }}
+      onDragStart={() => onDragStart(task)}
       onDragEnd={onDragEnd}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -264,7 +264,7 @@ export function TaskCard({
 
         {/* Action buttons */}
         <div className={cn("flex items-center gap-1", (!showActions || isEditing) && "invisible")}>
-            {!isSubtask && onMoveUp && (
+            {onMoveUp && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -276,7 +276,7 @@ export function TaskCard({
                 <span className="sr-only">Move up in list</span>
               </Button>
             )}
-            {!isSubtask && onMoveDown && (
+            {onMoveDown && (
               <Button
                 variant="ghost"
                 size="icon"

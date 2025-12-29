@@ -146,7 +146,21 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       return
     }
 
-    // Only allow reordering top-level tasks
+    // Handle subtask reordering - both must be subtasks of the same parent
+    if (draggedTask.parent_task_id !== null && targetTask.parent_task_id !== null) {
+      if (draggedTask.parent_task_id === targetTask.parent_task_id) {
+        // Both are subtasks of the same parent - allow reordering
+        await handleReorderSubtasks(draggedTask, targetTask, insertBefore)
+        setDraggedTask(null)
+        return
+      } else {
+        // Different parents - don't allow
+        setDraggedTask(null)
+        return
+      }
+    }
+
+    // Only allow reordering top-level tasks with top-level tasks
     if (draggedTask.parent_task_id !== null || targetTask.parent_task_id !== null) {
       setDraggedTask(null)
       return
@@ -161,6 +175,77 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     // Different horizon - move to new horizon at specific position
     await handleDropToHorizonAtPosition(targetTask.time_horizon, targetTask, insertBefore)
+  }
+
+  const handleReorderSubtasks = async (draggedTask: Task, targetTask: Task, insertBefore: boolean) => {
+    if (!draggedTask.parent_task_id || draggedTask.parent_task_id !== targetTask.parent_task_id) {
+      setDraggedTask(null)
+      return
+    }
+
+    const supabase = createClient()
+    const parentId = draggedTask.parent_task_id
+    
+    // Get all subtasks of the same parent, excluding the dragged task
+    const siblingSubtasks = tasks.filter(
+      (t) => t.parent_task_id === parentId && t.id !== draggedTask.id,
+    )
+    siblingSubtasks.sort((a, b) => a.position - b.position)
+
+    const targetIndex = siblingSubtasks.findIndex((t) => t.id === targetTask.id)
+    if (targetIndex === -1) {
+      setDraggedTask(null)
+      return
+    }
+
+    // Build the new order
+    const reorderedTasks: Task[] = []
+    
+    if (insertBefore) {
+      // Insert before target
+      reorderedTasks.push(...siblingSubtasks.slice(0, targetIndex))
+      reorderedTasks.push(draggedTask)
+      reorderedTasks.push(...siblingSubtasks.slice(targetIndex))
+    } else {
+      // Insert after target
+      reorderedTasks.push(...siblingSubtasks.slice(0, targetIndex + 1))
+      reorderedTasks.push(draggedTask)
+      reorderedTasks.push(...siblingSubtasks.slice(targetIndex + 1))
+    }
+
+    // Assign new positions (0, 1, 2, ...)
+    const positionUpdates = reorderedTasks.map((task, index) => ({
+      id: task.id,
+      position: index,
+    }))
+
+    // Store original positions for revert
+    const originalPositions = new Map(reorderedTasks.map((t) => [t.id, t.position]))
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((task) => {
+        const update = positionUpdates.find((u) => u.id === task.id)
+        return update ? { ...task, position: update.position } : task
+      }),
+    )
+
+    try {
+      // Update all positions
+      for (const update of positionUpdates) {
+        const { error } = await supabase.from("tasks").update({ position: update.position }).eq("id", update.id)
+        if (error) throw error
+      }
+    } catch (err) {
+      console.error("[v0] Error reordering subtasks:", err)
+      // Revert
+      setTasks((prev) =>
+        prev.map((task) => {
+          const originalPos = originalPositions.get(task.id)
+          return originalPos !== undefined ? { ...task, position: originalPos } : task
+        }),
+      )
+    }
   }
 
   const handleReorderWithinHorizon = async (draggedTask: Task, targetTask: Task, insertBefore: boolean) => {
@@ -470,18 +555,24 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   }
 
   const handleMoveUp = async (task: Task) => {
-    if (task.parent_task_id !== null) return // Only top-level tasks can be reordered
-
     const supabase = createClient()
-    const topLevelTasks = tasks.filter(
-      (t) => t.time_horizon === task.time_horizon && t.parent_task_id === null,
-    )
-    topLevelTasks.sort((a, b) => a.position - b.position)
+    
+    // Get tasks in the same group (top-level or subtasks of the same parent)
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        // Top-level task - get other top-level tasks in same horizon
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      } else {
+        // Subtask - get other subtasks of the same parent
+        return t.parent_task_id === task.parent_task_id
+      }
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
 
-    const currentIndex = topLevelTasks.findIndex((t) => t.id === task.id)
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
     if (currentIndex <= 0) return // Already at top
 
-    const previousTask = topLevelTasks[currentIndex - 1]
+    const previousTask = siblingTasks[currentIndex - 1]
     const newPosition = previousTask.position
     const oldPosition = task.position
 
@@ -523,18 +614,24 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   }
 
   const handleMoveDown = async (task: Task) => {
-    if (task.parent_task_id !== null) return // Only top-level tasks can be reordered
-
     const supabase = createClient()
-    const topLevelTasks = tasks.filter(
-      (t) => t.time_horizon === task.time_horizon && t.parent_task_id === null,
-    )
-    topLevelTasks.sort((a, b) => a.position - b.position)
+    
+    // Get tasks in the same group (top-level or subtasks of the same parent)
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        // Top-level task - get other top-level tasks in same horizon
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      } else {
+        // Subtask - get other subtasks of the same parent
+        return t.parent_task_id === task.parent_task_id
+      }
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
 
-    const currentIndex = topLevelTasks.findIndex((t) => t.id === task.id)
-    if (currentIndex < 0 || currentIndex >= topLevelTasks.length - 1) return // Already at bottom
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex < 0 || currentIndex >= siblingTasks.length - 1) return // Already at bottom
 
-    const nextTask = topLevelTasks[currentIndex + 1]
+    const nextTask = siblingTasks[currentIndex + 1]
     const newPosition = nextTask.position
     const oldPosition = task.position
 
@@ -805,10 +902,27 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             >
               {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
-                const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
-                const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
-                const canMoveUp = !isSubtask && currentTopLevelIndex > 0
-                const canMoveDown = !isSubtask && currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
+                
+                // Calculate canMoveUp and canMoveDown
+                let canMoveUp = false
+                let canMoveDown = false
+                
+                if (isSubtask) {
+                  // For subtasks, check position within parent's subtasks
+                  const siblingSubtasks = horizonTasks.filter(
+                    (t) => t.parent_task_id === task.parent_task_id
+                  )
+                  siblingSubtasks.sort((a, b) => a.position - b.position)
+                  const currentSubtaskIndex = siblingSubtasks.findIndex((t) => t.id === task.id)
+                  canMoveUp = currentSubtaskIndex > 0
+                  canMoveDown = currentSubtaskIndex >= 0 && currentSubtaskIndex < siblingSubtasks.length - 1
+                } else {
+                  // For top-level tasks, check position within horizon
+                  const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
+                  const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
+                  canMoveUp = currentTopLevelIndex > 0
+                  canMoveDown = currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
+                }
 
                 // Determine if we should show the subtask input after this task
                 // Show input after the last subtask of a parent, or after a parent with no subtasks
