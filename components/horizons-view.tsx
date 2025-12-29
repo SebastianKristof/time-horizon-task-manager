@@ -1044,7 +1044,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                       e.preventDefault()
                       if (newTaskInputs[horizon.value].trim()) {
                         handleCreateTask(horizon.value, newTaskInputs[horizon.value])
-                        requestAnimationFrame(() => inputRefs.current[horizon.value]?.focus())
+                        // Don't re-focus - let the input stay focused naturally
                       }
                     } else if (e.key === "Escape") {
                       e.preventDefault()

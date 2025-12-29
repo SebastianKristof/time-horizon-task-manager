@@ -237,6 +237,7 @@ export function TaskCard({
                       <button
                         key={option.value}
                         type="button"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={async () => {
                           // Move to target horizon by calling onMoveHorizon multiple times
                           if (steps === 0) return
@@ -255,7 +256,13 @@ export function TaskCard({
                       </button>
                     )
                   })}
-                  <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => onDelete(task.id)}>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 ml-auto" 
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onDelete(task.id)}
+                  >
                     <Trash2 className="h-4 w-4" />
                     <span className="sr-only">Delete task</span>
                   </Button>
@@ -263,7 +270,13 @@ export function TaskCard({
               )}
               {isSubtask && (
                 <div className="flex md:hidden items-center gap-1 justify-end">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(task.id)}>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7" 
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onDelete(task.id)}
+                  >
                     <Trash2 className="h-4 w-4" />
                     <span className="sr-only">Delete subtask</span>
                   </Button>
