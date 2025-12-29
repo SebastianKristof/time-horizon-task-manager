@@ -538,7 +538,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             </div>
 
             {/* Task list */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col">
               {horizonTasks.map((task) => {
                 const isSubtask = task.parent_task_id !== null
                 const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
@@ -568,7 +568,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
               })}
 
               {/* Inline task creation */}
-              <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-card/50 px-2 py-1.5">
+              <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-card/50 px-2 py-0.5">
                 <Plus className="h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
@@ -605,22 +605,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     inputRefs.current[horizon.value] = element
                   }}
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    if (newTaskInputs[horizon.value].trim()) {
-                      handleCreateTask(horizon.value, newTaskInputs[horizon.value])
-                      requestAnimationFrame(() => inputRefs.current[horizon.value]?.focus())
-                    } else {
-                      inputRefs.current[horizon.value]?.focus()
-                    }
-                  }}
-                >
-                  Add
-                </Button>
                 {(isFocused || hasInputValue) && (
                   <Button
                     type="button"

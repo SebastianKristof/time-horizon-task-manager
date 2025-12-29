@@ -110,7 +110,7 @@ export function RetrospectiveView({ initialTasks }: RetrospectiveViewProps) {
                       <div key={task.id} className="rounded-lg border border-border bg-card p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
-                            <p className="font-medium line-through text-muted-foreground">{task.title}</p>
+                            <p className="font-medium text-muted-foreground">{task.title}</p>
                             {task.description && (
                               <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
                             )}
@@ -143,7 +143,7 @@ export function RetrospectiveView({ initialTasks }: RetrospectiveViewProps) {
                   <div key={task.id} className="rounded-lg border border-border bg-card p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <p className="font-medium line-through text-muted-foreground">{task.title}</p>
+                        <p className="font-medium text-muted-foreground">{task.title}</p>
                         {task.description && (
                           <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
                         )}

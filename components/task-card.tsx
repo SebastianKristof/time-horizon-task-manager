@@ -2,7 +2,6 @@
 
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
@@ -122,8 +121,7 @@ export function TaskCard({
   return (
     <div
       className={cn(
-        "group relative rounded-md px-2 py-1.5 transition-colors",
-        "hover:bg-muted/30",
+        "group relative rounded-md px-2 py-0.5 bg-transparent transition-colors hover:bg-accent/30",
         task.completed && "opacity-60",
         !isSubtask && "cursor-grab active:cursor-grabbing",
       )}
@@ -135,16 +133,18 @@ export function TaskCard({
     >
       <div className="flex items-start gap-2">
         {/* Checkbox */}
-        <Checkbox
-          checked={task.completed}
-          onCheckedChange={() => onToggleComplete(task)}
+        <button
+          type="button"
+          onClick={() => onToggleComplete(task)}
           className={cn(
-            "mt-0.5 size-4",
-            task.completed
-              ? "border-green-600 bg-green-600 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 data-[state=checked]:text-white"
-              : "border-muted-foreground/80 bg-card",
+            "mt-0.5 flex items-center justify-center size-4 rounded border",
+            task.completed ? "border-transparent" : "border-muted-foreground/80 bg-transparent",
           )}
-        />
+        >
+          {task.completed ? (
+            <Check className="h-4 w-4 text-green-600 stroke-[5]" />
+          ) : null}
+        </button>
 
         {/* Task content */}
         <div className="flex-1">
@@ -192,7 +192,7 @@ export function TaskCard({
                 }
               }}
               className={cn(
-                "w-full text-left font-medium leading-tight text-foreground transition-colors hover:underline",
+                "w-full text-left font-medium leading-tight text-foreground",
                 task.completed && "text-muted-foreground",
               )}
             >
@@ -233,19 +233,6 @@ export function TaskCard({
               />
               <Button
                 type="button"
-                size="sm"
-                className="h-7"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  if (subtaskTitle.trim()) {
-                    handleSubtaskCreate(true)
-                  }
-                }}
-              >
-                Add
-              </Button>
-              <Button
-                type="button"
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
@@ -263,8 +250,7 @@ export function TaskCard({
         </div>
 
         {/* Action buttons */}
-        {showActions && !isEditing && (
-          <div className="flex items-center gap-1">
+        <div className={cn("flex items-center gap-1", (!showActions || isEditing) && "invisible")}>
             {!isSubtask && onMoveUp && (
               <Button
                 variant="ghost"
@@ -273,7 +259,7 @@ export function TaskCard({
                 onClick={() => onMoveUp(task)}
                 disabled={!canMoveUp}
               >
-                <ArrowUp className="h-4 w-4" />
+                <ChevronUp className="h-4 w-4" />
                 <span className="sr-only">Move up in list</span>
               </Button>
             )}
@@ -285,7 +271,7 @@ export function TaskCard({
                 onClick={() => onMoveDown(task)}
                 disabled={!canMoveDown}
               >
-                <ArrowDown className="h-4 w-4" />
+                <ChevronDown className="h-4 w-4" />
                 <span className="sr-only">Move down in list</span>
               </Button>
             )}
@@ -298,7 +284,7 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "up")}
                   disabled={!canMoveHorizonUp}
                 >
-                  <ChevronUp className="h-4 w-4" />
+                  <ArrowUp className="h-4 w-4" />
                   <span className="sr-only">Move to earlier horizon</span>
                 </Button>
                 <Button
@@ -308,7 +294,7 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "down")}
                   disabled={!canMoveHorizonDown}
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <ArrowDown className="h-4 w-4" />
                   <span className="sr-only">Move to later horizon</span>
                 </Button>
               </>
@@ -329,7 +315,6 @@ export function TaskCard({
               <span className="sr-only">Delete task</span>
             </Button>
           </div>
-        )}
       </div>
     </div>
   )
