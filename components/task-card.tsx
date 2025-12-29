@@ -44,8 +44,10 @@ export function TaskCard({
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
   const editInputRef = useRef<HTMLInputElement | null>(null)
-  const lastTapRef = useRef<number>(0)
-  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+  const longPressTimerRef = useRef<number | null>(null)
+  const skipEditClickRef = useRef(false)
+  const allowDragRef = useRef(false)
+  const lastPointerTypeRef = useRef<"mouse" | "touch" | "pen" | null>(null)
 
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -103,46 +105,29 @@ export function TaskCard({
   const canMoveHorizonDown = currentHorizonIndex < horizonOrder.length - 1
 
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isEditing || isSubtask) return
-    
-    const touch = e.touches[0]
-    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    lastPointerTypeRef.current = e.pointerType
+    skipEditClickRef.current = false
+    if (e.pointerType === "mouse") {
+      allowDragRef.current = true
+      return
+    }
+    allowDragRef.current = false
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current)
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      allowDragRef.current = true
+      skipEditClickRef.current = true
+    }, 220)
   }
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    // Track movement for drag detection
-    if (touchStartPosRef.current && e.touches[0]) {
-      const touch = e.touches[0]
-      const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x)
-      const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y)
-      
-      // If moved significantly, it's a drag, not a tap
-      if (deltaX > 10 || deltaY > 10) {
-        touchStartPosRef.current = null
-      }
+  const handlePointerUp = () => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current)
     }
-  }
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (isEditing || isSubtask) return
-    
-    // Check if this was a tap (not a drag)
-    if (touchStartPosRef.current) {
-      const currentTime = Date.now()
-      const tapLength = currentTime - lastTapRef.current
-      
-      // Double tap detection: two taps within 300ms and similar position
-      if (tapLength < 300 && tapLength > 0) {
-        e.preventDefault()
-        startEditing()
-        lastTapRef.current = 0 // Reset to prevent triple tap
-      } else {
-        lastTapRef.current = currentTime
-      }
-    }
-    
-    touchStartPosRef.current = null
+    allowDragRef.current = false
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -172,15 +157,26 @@ export function TaskCard({
         task.completed && "opacity-60",
         "cursor-grab active:cursor-grabbing",
       )}
-      draggable
+      draggable={!isSubtask}
       style={{ touchAction: "manipulation" }}
-      onDragStart={() => onDragStart(task)}
-      onDragEnd={onDragEnd}
+      onDragStart={(e) => {
+        if (isSubtask) return
+        if (lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
+          e.preventDefault()
+          return
+        }
+        onDragStart(task)
+      }}
+      onDragEnd={() => {
+        allowDragRef.current = false
+        skipEditClickRef.current = false
+        onDragEnd()
+      }}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -214,16 +210,6 @@ export function TaskCard({
               />
               <Button
                 type="button"
-                size="sm"
-                className="h-7"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={saveEdit}
-              >
-                <Check className="h-4 w-4" />
-                Save
-              </Button>
-              <Button
-                type="button"
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
@@ -231,17 +217,18 @@ export function TaskCard({
                 onClick={cancelEdit}
               >
                 <X className="h-4 w-4" />
-                <span className="sr-only">Cancel edit</span>
+                <span className="sr-only">Cancel</span>
               </Button>
             </div>
           ) : (
             <button
               type="button"
-              onClick={(e) => {
-                // On desktop, single click to edit. On mobile, double tap handles it.
-                if (!("ontouchstart" in window)) {
-                  startEditing()
+              onClick={() => {
+                if (skipEditClickRef.current) {
+                  skipEditClickRef.current = false
+                  return
                 }
+                startEditing()
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
