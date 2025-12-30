@@ -37,7 +37,7 @@ export default async function EntryPage() {
 
         {/* Subtle description */}
         <p className="text-center text-sm text-muted-foreground leading-relaxed text-pretty">
-          Organize tasks across time horizons: now, soon, later, someday
+          Organize tasks across time horizons: now, soon, later, Someday
         </p>
       </div>
     </div>

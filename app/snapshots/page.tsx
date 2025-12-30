@@ -32,9 +32,9 @@ export default async function SnapshotsPage() {
       {/* Header */}
       <header className="flex items-center justify-between border-b border-border p-4">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/retrospective">
+          <Link href="/completed">
             <ChevronLeft className="h-4 w-4" />
-            Back to Retrospective
+            Back to Completed
           </Link>
         </Button>
         <h1 className="text-xl font-semibold">Snapshots</h1>
@@ -55,7 +55,7 @@ export default async function SnapshotsPage() {
             <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card p-12 text-center">
               <p className="text-muted-foreground">No snapshots created yet</p>
               <Button asChild>
-                <Link href="/retrospective">Create Your First Snapshot</Link>
+                <Link href="/completed">Create Your First Snapshot</Link>
               </Button>
             </div>
           ) : (

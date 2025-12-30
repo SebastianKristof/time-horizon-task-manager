@@ -9,6 +9,7 @@ create policy "snapshots_select_own"
   using (auth.uid() = user_id);
 
 -- Policy for public read access to shared snapshots
+drop policy if exists "snapshots_select_public" on public.snapshots;
 create policy "snapshots_select_public"
   on public.snapshots for select
   using (true);

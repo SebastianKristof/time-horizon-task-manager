@@ -12,9 +12,6 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 # Database Connection
 # POSTGRES_URL=... (If using Vercel Postgres/Neon)
 DATABASE_URL=your_database_url
-
-# Authentication Redirects
-NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
 ```
 
 ## Authentication Flow
