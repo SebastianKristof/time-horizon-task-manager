@@ -1324,7 +1324,7 @@ export function HorizonsView({
 
             {/* Task list */}
             <div
-              className="flex flex-col"
+              className="flex flex-col min-h-[40px]"
               role="list"
               aria-label={`${horizon.label} tasks`}
               onDragOver={(e) => {
@@ -1340,6 +1340,11 @@ export function HorizonsView({
                 setDropIndicator(null)
               }}
             >
+              {horizonTasks.length === 0 && (
+                <div className="rounded-md border border-dashed border-border/70 py-2 text-center text-sm text-muted-foreground">
+                  Drop tasks here
+                </div>
+              )}
               {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
                 const isTaskFocused = activeTaskId === task.id
