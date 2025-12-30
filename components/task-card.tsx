@@ -2,7 +2,7 @@
 
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { cn } from "@/lib/utils"
 
@@ -13,6 +13,9 @@ interface TaskCardProps {
   onToggleComplete: (task: Task) => void
   onDelete: (taskId: string) => void
   isSubtask?: boolean
+  hasSubtasks?: boolean
+  isCollapsed?: boolean
+  onToggleCollapse?: (taskId: string, nextCollapsed?: boolean) => void
   onMoveUp?: (task: Task) => void
   onMoveDown?: (task: Task) => void
   onMoveHorizon?: (task: Task, direction: "up" | "down") => void
@@ -36,6 +39,9 @@ export function TaskCard({
   onToggleComplete,
   onDelete,
   isSubtask = false,
+  hasSubtasks = false,
+  isCollapsed = false,
+  onToggleCollapse,
   onMoveUp,
   onMoveDown,
   onMoveHorizon,
@@ -188,6 +194,12 @@ export function TaskCard({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditing) return
 
+    if (hasSubtasks && onToggleCollapse && e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault()
+      onToggleCollapse(task.id, e.key === "ArrowLeft")
+      return
+    }
+
     if (e.key === " " || e.key === "Spacebar") {
       e.preventDefault()
       onToggleComplete(task)
@@ -259,7 +271,7 @@ export function TaskCard({
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
       aria-label={task.title}
-      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
+      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
       onFocus={() => onFocusTask?.(task.id)}
       onKeyDown={handleKeyDown}
       onDragStart={(e) => {
@@ -415,36 +427,57 @@ export function TaskCard({
               )}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (!shouldEditOnClick()) return
-                if (skipEditClickRef.current) {
-                  skipEditClickRef.current = false
-                  return
-                }
-                startEditing()
-              }}
-              onDoubleClick={() => {
-                if (task.completed) return
-                if (lastPointerTypeRef.current !== "mouse") return
-                startEditing()
-              }}
-              onKeyDown={(e) => {
-                if (task.completed) return // Don't allow editing completed tasks
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  startEditing()
-                }
-              }}
-              tabIndex={-1}
-              className={cn(
-                "w-full text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
-                task.completed && "text-muted-foreground cursor-default",
+            <div className="flex items-start gap-1.5">
+              {hasSubtasks && !isSubtask && (
+                <button
+                  type="button"
+                  className={cn(
+                    "mt-0.5 flex size-5 items-center justify-center rounded hover:bg-accent/40",
+                    "text-muted-foreground hover:text-foreground"
+                  )}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleCollapse?.(task.id, !isCollapsed)
+                  }}
+                  aria-label={isCollapsed ? "Expand subtasks" : "Collapse subtasks"}
+                  aria-expanded={!isCollapsed}
+                  tabIndex={-1}
+                >
+                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
               )}
-            >
-              {task.title}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!shouldEditOnClick()) return
+                  if (skipEditClickRef.current) {
+                    skipEditClickRef.current = false
+                    return
+                  }
+                  startEditing()
+                }}
+                onDoubleClick={() => {
+                  if (task.completed) return
+                  if (lastPointerTypeRef.current !== "mouse") return
+                  startEditing()
+                }}
+                onKeyDown={(e) => {
+                  if (task.completed) return // Don't allow editing completed tasks
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    startEditing()
+                  }
+                }}
+                tabIndex={-1}
+                className={cn(
+                  "w-full text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
+                  task.completed && "text-muted-foreground cursor-default",
+                )}
+              >
+                {task.title}
+              </button>
+            </div>
           )}
           {task.description && !isEditing && (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{task.description}</p>
