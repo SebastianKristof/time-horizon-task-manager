@@ -70,6 +70,7 @@ export function TaskCard({
   const skipEditClickRef = useRef(false)
   const allowDragRef = useRef(false)
   const lastPointerTypeRef = useRef<"mouse" | "touch" | "pen" | null>(null)
+  const longPressTriggeredRef = useRef(false)
 
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -154,9 +155,15 @@ export function TaskCard({
     skipEditClickRef.current = false
     if (isCompactLayout) {
       allowDragRef.current = false
+      longPressTriggeredRef.current = false
       if (longPressTimerRef.current) {
         window.clearTimeout(longPressTimerRef.current)
       }
+      longPressTimerRef.current = window.setTimeout(() => {
+        allowDragRef.current = true
+        longPressTriggeredRef.current = true
+        skipEditClickRef.current = true
+      }, 220)
       return
     }
     if (e.pointerType === "mouse" && !isCompactLayout) {
@@ -178,6 +185,7 @@ export function TaskCard({
       window.clearTimeout(longPressTimerRef.current)
     }
     allowDragRef.current = false
+    longPressTriggeredRef.current = false
     skipEditClickRef.current = false
   }
 
@@ -284,7 +292,7 @@ export function TaskCard({
         "cursor-grab active:cursor-grabbing",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-within:ring-2 focus-within:ring-primary/30",
       )}
-      draggable={!isCompactLayout}
+      draggable
       style={{ touchAction: "manipulation" }}
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
@@ -520,19 +528,18 @@ export function TaskCard({
                 }
                 startEditing()
               }}
-              onPointerDown={(event) => {
-                if (!isCompactLayout) return
-                if (!shouldEditOnClick()) return
-                if (skipEditClickRef.current) {
-                  skipEditClickRef.current = false
+              onPointerUp={(event) => {
+                if (isCompactLayout) {
+                  if (!shouldEditOnClick()) return
+                  if (skipEditClickRef.current || longPressTriggeredRef.current) {
+                    skipEditClickRef.current = false
+                    return
+                  }
+                  event.preventDefault()
+                  startEditing()
                   return
                 }
-                event.preventDefault()
-                startEditing()
-              }}
-              onPointerUp={(event) => {
-                if (isCompactLayout) return
-                if (event.pointerType === "mouse" && !isCompactLayout) return
+                if (event.pointerType === "mouse") return
                 if (!shouldEditOnClick()) return
                 if (skipEditClickRef.current) {
                   skipEditClickRef.current = false
@@ -557,6 +564,7 @@ export function TaskCard({
                 }
               }}
               tabIndex={-1}
+              data-task-title="true"
               className={cn(
                 "inline text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
                 task.completed && "text-muted-foreground cursor-default",
