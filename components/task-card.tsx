@@ -63,6 +63,7 @@ export function TaskCard({
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
+  const [isCompactLayout, setIsCompactLayout] = useState(false)
   const editInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const longPressTimerRef = useRef<number | null>(null)
@@ -78,7 +79,7 @@ export function TaskCard({
   }, [isEditing])
 
   useEffect(() => {
-    if (!isEditing && isFocused) {
+    if (!isEditing && isFocused && !isCompactLayout) {
       requestAnimationFrame(() => {
         cardRef.current?.focus()
       })
@@ -90,6 +91,18 @@ export function TaskCard({
       setOriginalTitle(task.title)
     }
   }, [task.title, isEditing])
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)")
+    const handleChange = () => setIsCompactLayout(media.matches)
+    handleChange()
+    if (media.addEventListener) {
+      media.addEventListener("change", handleChange)
+      return () => media.removeEventListener("change", handleChange)
+    }
+    media.addListener(handleChange)
+    return () => media.removeListener(handleChange)
+  }, [])
 
 
   const startEditing = () => {
@@ -139,7 +152,14 @@ export function TaskCard({
     if (isEditing) return
     lastPointerTypeRef.current = e.pointerType
     skipEditClickRef.current = false
-    if (e.pointerType === "mouse") {
+    if (isCompactLayout) {
+      allowDragRef.current = false
+      if (longPressTimerRef.current) {
+        window.clearTimeout(longPressTimerRef.current)
+      }
+      return
+    }
+    if (e.pointerType === "mouse" && !isCompactLayout) {
       allowDragRef.current = true
       return
     }
@@ -158,6 +178,7 @@ export function TaskCard({
       window.clearTimeout(longPressTimerRef.current)
     }
     allowDragRef.current = false
+    skipEditClickRef.current = false
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -250,6 +271,7 @@ export function TaskCard({
 
   const shouldEditOnClick = () => {
     if (task.completed) return false
+    if (isCompactLayout) return true
     return lastPointerTypeRef.current !== "mouse"
   }
 
@@ -262,7 +284,7 @@ export function TaskCard({
         "cursor-grab active:cursor-grabbing",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-within:ring-2 focus-within:ring-primary/30",
       )}
-      draggable
+      draggable={!isCompactLayout}
       style={{ touchAction: "manipulation" }}
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
@@ -270,7 +292,14 @@ export function TaskCard({
       aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
       onFocus={() => onFocusTask?.(task.id)}
       onKeyDown={handleKeyDown}
+      onContextMenu={(event) => {
+        event.preventDefault()
+      }}
       onDragStart={(e) => {
+        if (isCompactLayout) {
+          e.preventDefault()
+          return
+        }
         if (lastPointerTypeRef.current && lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
           e.preventDefault()
           return
@@ -491,6 +520,30 @@ export function TaskCard({
                 }
                 startEditing()
               }}
+              onPointerDown={(event) => {
+                if (!isCompactLayout) return
+                if (!shouldEditOnClick()) return
+                if (skipEditClickRef.current) {
+                  skipEditClickRef.current = false
+                  return
+                }
+                event.preventDefault()
+                startEditing()
+              }}
+              onPointerUp={(event) => {
+                if (isCompactLayout) return
+                if (event.pointerType === "mouse" && !isCompactLayout) return
+                if (!shouldEditOnClick()) return
+                if (skipEditClickRef.current) {
+                  skipEditClickRef.current = false
+                  return
+                }
+                if (allowDragRef.current) return
+                startEditing()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+              }}
               onDoubleClick={() => {
                 if (task.completed) return
                 if (lastPointerTypeRef.current !== "mouse") return
@@ -505,7 +558,7 @@ export function TaskCard({
               }}
               tabIndex={-1}
               className={cn(
-                "w-full text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
+                "inline text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
                 task.completed && "text-muted-foreground cursor-default",
               )}
             >
