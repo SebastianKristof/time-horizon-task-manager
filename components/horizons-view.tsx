@@ -6,7 +6,7 @@ import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Plus, X, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react"
+import { Plus, X, Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
@@ -35,13 +35,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
-  const [collapsedHorizons, setCollapsedHorizons] = useState<Record<TimeHorizon, boolean>>({
-    now: false,
-    soon: false,
-    later: false,
-    someday: false,
-  })
-  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({})
   const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("showCompletedTasks")
@@ -181,47 +174,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     return result
   }, [tasks, showCompletedTasks])
 
-  const visibleTasksByHorizon = useMemo(() => {
-    const result: Record<TimeHorizon, Task[]> = {
-      now: [],
-      soon: [],
-      later: [],
-      someday: [],
-    }
-
-    horizonOrder.forEach((horizon) => {
-      if (collapsedHorizons[horizon]) {
-        result[horizon] = []
-        return
-      }
-
-      const horizonTasks = organizedTasks[horizon]
-      const visible = horizonTasks.filter((task) => {
-        if (!task.parent_task_id) return true
-        return !collapsedTasks[task.parent_task_id]
-      })
-      result[horizon] = visible
-    })
-
-    return result
-  }, [organizedTasks, collapsedHorizons, collapsedTasks])
-
-  const visibleTaskIds = useMemo(() => {
-    const ids = new Set<string>()
-    horizonOrder.forEach((horizon) => {
-      visibleTasksByHorizon[horizon].forEach((task) => ids.add(task.id))
-    })
-    return ids
-  }, [visibleTasksByHorizon])
-
-  const firstVisibleTaskId = useMemo(() => {
-    for (const horizon of horizonOrder) {
-      const firstTask = visibleTasksByHorizon[horizon][0]
-      if (firstTask) return firstTask.id
-    }
-    return null
-  }, [visibleTasksByHorizon])
-
   const defaultFocusTaskId = useMemo(() => {
     for (const horizon of horizonOrder) {
       const firstTask = organizedTasks[horizon][0]
@@ -232,16 +184,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   useEffect(() => {
     if (focusedTaskId && !tasks.some((task) => task.id === focusedTaskId)) {
-      setFocusedTaskId(firstVisibleTaskId)
+      setFocusedTaskId(defaultFocusTaskId)
     }
-  }, [focusedTaskId, tasks, firstVisibleTaskId])
-
-  useEffect(() => {
-    if (!focusedTaskId) return
-    if (!visibleTaskIds.has(focusedTaskId)) {
-      setFocusedTaskId(firstVisibleTaskId)
-    }
-  }, [focusedTaskId, visibleTaskIds, firstVisibleTaskId])
+  }, [focusedTaskId, tasks, defaultFocusTaskId])
 
   const focusTask = (taskId: string) => {
     setFocusedTaskId(taskId)
@@ -1208,7 +1153,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     if (event.altKey || event.ctrlKey || event.metaKey) return
 
-    const horizonTasks = visibleTasksByHorizon[task.time_horizon]
+    const horizonTasks = organizedTasks[task.time_horizon]
     const currentIndex = horizonTasks.findIndex((t) => t.id === task.id)
     if (currentIndex < 0) return
 
@@ -1219,56 +1164,42 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         targetTask = horizonTasks[currentIndex - 1]
         if (!targetTask) {
           const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-          for (let i = currentHorizonIndex - 1; i >= 0; i -= 1) {
-            const targetHorizon = horizonOrder[i]
-            const targetTasks = visibleTasksByHorizon[targetHorizon]
-            if (targetTasks.length > 0) {
-              targetTask = targetTasks[targetTasks.length - 1]
-              break
-            }
-          }
-          if (!targetTask) return
+          const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[targetTasks.length - 1]
         }
         break
       case "ArrowDown":
         targetTask = horizonTasks[currentIndex + 1]
         if (!targetTask) {
           const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-          for (let i = currentHorizonIndex + 1; i < horizonOrder.length; i += 1) {
-            const targetHorizon = horizonOrder[i]
-            const targetTasks = visibleTasksByHorizon[targetHorizon]
-            if (targetTasks.length > 0) {
-              targetTask = targetTasks[0]
-              break
-            }
-          }
-          if (!targetTask) return
+          const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[0]
         }
         break
       case "ArrowLeft": {
         const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-        for (let i = currentHorizonIndex - 1; i >= 0; i -= 1) {
-          const targetHorizon = horizonOrder[i]
-          const targetTasks = visibleTasksByHorizon[targetHorizon]
-          if (targetTasks.length === 0) continue
-          const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
-          targetTask = targetTasks[targetIndex]
-          break
-        }
-        if (!targetTask) return
+        const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
         break
       }
       case "ArrowRight": {
         const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-        for (let i = currentHorizonIndex + 1; i < horizonOrder.length; i += 1) {
-          const targetHorizon = horizonOrder[i]
-          const targetTasks = visibleTasksByHorizon[targetHorizon]
-          if (targetTasks.length === 0) continue
-          const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
-          targetTask = targetTasks[targetIndex]
-          break
-        }
-        if (!targetTask) return
+        const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
         break
       }
       default:
@@ -1281,7 +1212,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const activeTaskId = focusedTaskId ?? firstVisibleTaskId
+  const activeTaskId = focusedTaskId ?? defaultFocusTaskId
   const deleteConfirmTask = deleteConfirmTaskId
     ? tasks.find((task) => task.id === deleteConfirmTaskId)
     : null
@@ -1337,7 +1268,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
           <div className="flex flex-col gap-1">
             <div>Up/Down: move focus</div>
             <div>Left/Right: change horizon</div>
-            <div>Shift + Left/Right: collapse/expand subtasks</div>
             <div>Enter: edit task</div>
             <div>Esc: cancel edit</div>
             <div>Space: toggle complete</div>
@@ -1413,24 +1343,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       )}
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
-        const visibleHorizonTasks = visibleTasksByHorizon[horizon.value]
         const isFocused = focusedHorizon === horizon.value
-        const isCollapsed = collapsedHorizons[horizon.value]
 
         return (
           <div key={horizon.value} className="mb-8">
             {/* Section heading */}
             <div className="mb-4 border-b border-border pb-2">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent/40"
-                  onClick={() => toggleHorizonCollapse(horizon.value)}
-                  aria-label={isCollapsed ? `Expand ${horizon.label}` : `Collapse ${horizon.label}`}
-                  aria-expanded={!isCollapsed}
-                >
-                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
                 <h2 className="text-xl font-semibold">{horizon.label}</h2>
                 <span className="text-xs text-muted-foreground">{horizonTasks.length}</span>
               </div>
@@ -1454,10 +1373,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                 setDropIndicator(null)
               }}
             >
-              {isCollapsed ? (
-                <div className="text-sm text-muted-foreground">Collapsed</div>
-              ) : (
-              visibleHorizonTasks.map((task, taskIndex) => {
+              {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
                 const isTaskFocused = activeTaskId === task.id
                 
@@ -1495,16 +1411,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     showSubtaskInput = parentSubtasks.length === 0
                   } else if (isSubtask && task.parent_task_id === subtaskInputParentId) {
                     // Show input after the last subtask of this parent
-                    const nextTask = visibleHorizonTasks[taskIndex + 1]
+                    const nextTask = horizonTasks[taskIndex + 1]
                     showSubtaskInput = !nextTask || nextTask.parent_task_id !== subtaskInputParentId
                   }
                 }
 
                 const showDropIndicatorAbove = draggedTask && dropIndicator?.taskId === task.id && dropIndicator.insertBefore
                 const showDropIndicatorBelow = draggedTask && dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
-                const parentSubtasks = horizonTasks.filter((t) => t.parent_task_id === task.id)
-                const hasSubtasks = !isSubtask && parentSubtasks.length > 0
-                const isCollapsed = hasSubtasks && collapsedTasks[task.id]
 
                 return (
                   <div key={task.id}>
@@ -1522,9 +1435,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         onToggleComplete={handleToggleComplete}
                         onDelete={handleDelete}
                         isSubtask={isSubtask}
-                        hasSubtasks={hasSubtasks}
-                        isCollapsed={isCollapsed}
-                        onToggleCollapse={toggleTaskCollapse}
                         onMoveUp={handleMoveUp}
                         onMoveDown={handleMoveDown}
                         onMoveHorizon={handleMoveHorizon}
@@ -1532,7 +1442,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         onAddSubtask={(parentTask) => {
                           setSubtaskInputParentId(parentTask.id)
                           setSubtaskInputValue("")
-                          setCollapsedTasks((prev) => ({ ...prev, [parentTask.id]: false }))
                         }}
                         canMoveUp={canMoveUp}
                         canMoveDown={canMoveDown}
@@ -1602,11 +1511,10 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     )}
                   </div>
                 )
-              })
-              )}
+              })}
 
               {/* Inline task creation */}
-              {!isCollapsed && isFocused ? (
+              {isFocused ? (
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border bg-card/50">
                     <Plus className="h-4 w-4 text-muted-foreground" />
@@ -1678,7 +1586,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     <span className="sr-only">Cancel</span>
                   </Button>
                 </div>
-              ) : !isCollapsed ? (
+              ) : (
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -1696,7 +1604,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     <span className="sr-only">Add a task</span>
                   </Button>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         )
