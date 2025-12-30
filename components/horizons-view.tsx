@@ -88,6 +88,22 @@ export function HorizonsView({
   }, [draggedTask])
 
   useEffect(() => {
+    if (!draggedTask) return
+    const handleDragOver = (event: DragEvent) => {
+      const threshold = 80
+      const speed = 12
+      if (event.clientY < threshold) {
+        window.scrollBy({ top: -speed })
+      } else if (event.clientY > window.innerHeight - threshold) {
+        window.scrollBy({ top: speed })
+      }
+    }
+
+    window.addEventListener("dragover", handleDragOver)
+    return () => window.removeEventListener("dragover", handleDragOver)
+  }, [draggedTask])
+
+  useEffect(() => {
     const supabase = createClient()
 
     // Subscribe to real-time changes
