@@ -110,11 +110,13 @@ export function TaskCard({
   }
 
   const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if ((e.key === "Enter" || e.key === "NumpadEnter") && !e.shiftKey) {
       e.preventDefault()
+      e.stopPropagation()
       saveEdit()
     } else if (e.key === "Escape") {
       e.preventDefault()
+      e.stopPropagation()
       cancelEdit()
     }
   }
@@ -192,7 +194,7 @@ export function TaskCard({
       return
     }
 
-    if (e.key === "Enter") {
+    if (e.key === "Enter" || e.key === "NumpadEnter") {
       e.preventDefault()
       startEditing()
       return
@@ -226,16 +228,6 @@ export function TaskCard({
       return
     }
 
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-      e.preventDefault()
-      if (e.key === "ArrowUp") {
-        onMoveUp?.(task)
-      } else {
-        onMoveDown?.(task)
-      }
-      return
-    }
-
     onNavigateKey?.(e, task)
   }
 
@@ -262,7 +254,7 @@ export function TaskCard({
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
       aria-label={task.title}
-      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Home End A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight Ctrl+Shift+ArrowUp Ctrl+Shift+ArrowDown"
+      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
       onFocus={() => onFocusTask?.(task.id)}
       onKeyDown={handleKeyDown}
       onDragStart={(e) => {

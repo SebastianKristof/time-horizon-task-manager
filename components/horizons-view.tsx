@@ -34,6 +34,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
@@ -44,13 +45,28 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     later: null,
     someday: null,
   })
+  const lastCreatedTaskIdRef = useRef<Record<TimeHorizon, string | null>>({
+    now: null,
+    soon: null,
+    later: null,
+    someday: null,
+  })
   const taskRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
+  const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (subtaskInputParentId && subtaskInputRef.current) {
       subtaskInputRef.current.focus()
     }
   }, [subtaskInputParentId])
+
+  useEffect(() => {
+    if (!focusedHorizon) return
+    requestAnimationFrame(() => {
+      inputRefs.current[focusedHorizon]?.focus()
+    })
+  }, [focusedHorizon])
 
   // Clear drop indicator when drag ends (when draggedTask becomes null)
   useEffect(() => {
@@ -165,6 +181,22 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       taskRefs.current[taskId]?.focus()
     })
   }
+
+  useEffect(() => {
+    if (!deleteConfirmTaskId) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        const taskId = deleteConfirmTaskId
+        setDeleteConfirmTaskId(null)
+        requestAnimationFrame(() => focusTask(taskId))
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [deleteConfirmTaskId])
 
   const getNextFocusAfterDelete = (taskId: string) => {
     const taskToDelete = tasks.find((task) => task.id === taskId)
@@ -652,14 +684,28 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = (taskId: string) => {
+    setDeleteConfirmTaskId(taskId)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmTaskId) return
     const supabase = createClient()
+    const nextFocusId = getNextFocusAfterDelete(deleteConfirmTaskId)
 
     // Optimistic update (cascade delete will handle subtasks)
-    setTasks((prev) => prev.filter((task) => task.id !== taskId && task.parent_task_id !== taskId))
+    setTasks((prev) =>
+      prev.filter((task) => task.id !== deleteConfirmTaskId && task.parent_task_id !== deleteConfirmTaskId),
+    )
+    if (nextFocusId) {
+      requestAnimationFrame(() => focusTask(nextFocusId))
+    } else {
+      setFocusedTaskId(null)
+    }
+    setDeleteConfirmTaskId(null)
 
     try {
-      const { error } = await supabase.from("tasks").delete().eq("id", taskId)
+      const { error } = await supabase.from("tasks").delete().eq("id", deleteConfirmTaskId)
 
       if (error) throw error
     } catch (err) {
@@ -801,10 +847,49 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       ? [task, ...tasks.filter((t) => t.parent_task_id === task.id)]
       : [task]
 
+    const topLevelTasksInTarget = tasks.filter(
+      (t) => t.time_horizon === targetHorizon && t.parent_task_id === null && !tasksToMove.some((tm) => tm.id === t.id),
+    )
+    topLevelTasksInTarget.sort((a, b) => a.position - b.position)
+
+    const originalPositions = new Map<string, number>()
+    const originalHorizons = new Map<string, TimeHorizon>()
+    tasksToMove.forEach((t) => {
+      originalPositions.set(t.id, t.position)
+      originalHorizons.set(t.id, t.time_horizon)
+    })
+    topLevelTasksInTarget.forEach((t) => {
+      originalPositions.set(t.id, t.position)
+    })
+
+    let newPosition: number | null = null
+    const positionUpdates: { id: string; position: number }[] = []
+
+    if (task.parent_task_id === null) {
+      if (direction === "down") {
+        newPosition = 0
+        positionUpdates.push(
+          ...topLevelTasksInTarget.map((t) => ({ id: t.id, position: t.position + 1 })),
+        )
+      } else {
+        const maxPosition = topLevelTasksInTarget.length > 0
+          ? Math.max(...topLevelTasksInTarget.map((t) => t.position))
+          : -1
+        newPosition = maxPosition + 1
+      }
+    }
+
     // Optimistic update
     setTasks((prev) =>
       prev.map((t) => {
+        const positionUpdate = positionUpdates.find((u) => u.id === t.id)
+        if (positionUpdate) {
+          return { ...t, position: positionUpdate.position }
+        }
         if (tasksToMove.some((tm) => tm.id === t.id)) {
+          if (t.id === task.id && newPosition !== null) {
+            return { ...t, time_horizon: targetHorizon, position: newPosition }
+          }
           return { ...t, time_horizon: targetHorizon }
         }
         return t
@@ -813,11 +898,25 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     requestAnimationFrame(() => focusTask(task.id))
 
     try {
-      // Update all tasks in batch
-      for (const taskToMove of tasksToMove) {
+      for (const update of positionUpdates) {
         const { error } = await supabase
           .from("tasks")
-          .update({ time_horizon: targetHorizon })
+          .update({ position: update.position })
+          .eq("id", update.id)
+        if (error) throw error
+      }
+
+      for (const taskToMove of tasksToMove) {
+        const updateData: { time_horizon: TimeHorizon; position?: number } = {
+          time_horizon: targetHorizon,
+        }
+        if (taskToMove.id === task.id && newPosition !== null) {
+          updateData.position = newPosition
+        }
+
+        const { error } = await supabase
+          .from("tasks")
+          .update(updateData)
           .eq("id", taskToMove.id)
 
         if (error) throw error
@@ -827,9 +926,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       // Revert
       setTasks((prev) =>
         prev.map((t) => {
-          const originalTask = tasksToMove.find((tm) => tm.id === t.id)
-          if (originalTask) {
-            return { ...t, time_horizon: originalTask.time_horizon }
+          const originalHorizon = originalHorizons.get(t.id)
+          if (originalHorizon) {
+            return { ...t, time_horizon: originalHorizon, position: originalPositions.get(t.id) ?? t.position }
+          }
+          const originalPosition = originalPositions.get(t.id)
+          if (originalPosition !== undefined) {
+            return { ...t, position: originalPosition }
           }
           return t
         }),
@@ -892,6 +995,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     // Optimistic update
     setTasks((prev) => [...prev, newSubtask])
     setSubtaskInputValue("")
+    requestAnimationFrame(() => focusTask(newSubtask.id))
 
     try {
       const { data, error } = await supabase
@@ -914,6 +1018,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       setTasks((prev) =>
         prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t)),
       )
+      requestAnimationFrame(() => focusTask((data as Task).id))
 
       // Keep input open if requested (for Enter key behavior)
       if (keepInputOpen) {
@@ -929,7 +1034,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const handleCreateTask = async (horizon: TimeHorizon, title: string) => {
+  const handleCreateTask = async (horizon: TimeHorizon, title: string, keepInputOpen: boolean = false) => {
     if (!title.trim()) return
 
     const supabase = createClient()
@@ -958,6 +1063,11 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     // Optimistic update
     setTasks((prev) => [...prev, newTask])
     setNewTaskInputs((prev) => ({ ...prev, [horizon]: "" }))
+    lastCreatedTaskIdRef.current[horizon] = newTask.id
+    if (!keepInputOpen) {
+      requestAnimationFrame(() => focusTask(newTask.id))
+      setFocusedHorizon(null)
+    }
 
     try {
       const { data, error } = await supabase
@@ -980,11 +1090,23 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       setTasks((prev) =>
         prev.map((t) => (t.id === newTask.id ? (data as Task) : t)),
       )
+      lastCreatedTaskIdRef.current[horizon] = (data as Task).id
+      if (!keepInputOpen) {
+        requestAnimationFrame(() => focusTask((data as Task).id))
+      } else {
+        requestAnimationFrame(() => inputRefs.current[horizon]?.focus())
+      }
     } catch (err) {
       console.error("[v0] Error creating task:", err)
       // Revert
       setTasks((prev) => prev.filter((t) => t.id !== newTask.id))
       setNewTaskInputs((prev) => ({ ...prev, [horizon]: title.trim() }))
+      if (keepInputOpen) {
+        setFocusedHorizon(horizon)
+        requestAnimationFrame(() => inputRefs.current[horizon]?.focus())
+      } else {
+        setFocusedHorizon(horizon)
+      }
     }
   }
 
@@ -993,7 +1115,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     if (isPlainKey && (event.key === "a" || event.key === "A")) {
       event.preventDefault()
-      inputRefs.current[task.time_horizon]?.focus()
+      setNewTaskInputs((prev) => ({ ...prev, [task.time_horizon]: "" }))
       setFocusedHorizon(task.time_horizon)
       return
     }
@@ -1009,15 +1131,25 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     switch (event.key) {
       case "ArrowUp":
         targetTask = horizonTasks[currentIndex - 1]
+        if (!targetTask) {
+          const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
+          const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[targetTasks.length - 1]
+        }
         break
       case "ArrowDown":
         targetTask = horizonTasks[currentIndex + 1]
-        break
-      case "Home":
-        targetTask = horizonTasks[0]
-        break
-      case "End":
-        targetTask = horizonTasks[horizonTasks.length - 1]
+        if (!targetTask) {
+          const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
+          const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[0]
+        }
         break
       case "ArrowLeft": {
         const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
@@ -1050,6 +1182,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   }
 
   const activeTaskId = focusedTaskId ?? defaultFocusTaskId
+  const deleteConfirmTask = deleteConfirmTaskId
+    ? tasks.find((task) => task.id === deleteConfirmTaskId)
+    : null
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -1067,10 +1202,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       {isHelpOpen && (
         <div className="mb-6 rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
           <div className="mb-2 font-medium text-foreground">Shortcuts</div>
-          <div className="grid gap-1 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
             <div>Up/Down: move focus</div>
             <div>Left/Right: change horizon</div>
-            <div>Home / End: jump list</div>
             <div>Enter: edit task</div>
             <div>Esc: cancel edit</div>
             <div>Space: toggle complete</div>
@@ -1079,13 +1213,72 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             <div>Alt + Up/Down: move within list</div>
             <div>Alt + Left/Right: move horizon</div>
             <div>Delete: remove task</div>
-            <div>Ctrl/Cmd + Shift + Up/Down: reorder</div>
+          </div>
+        </div>
+      )}
+      {deleteConfirmTaskId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onMouseDown={(event) => {
+            if (event.target !== event.currentTarget) return
+            const taskId = deleteConfirmTaskId
+            setDeleteConfirmTaskId(null)
+            if (taskId) {
+              requestAnimationFrame(() => focusTask(taskId))
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-task-title"
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+              event.preventDefault()
+              const next =
+                document.activeElement === deleteCancelRef.current
+                  ? deleteConfirmRef.current
+                  : deleteCancelRef.current
+              next?.focus()
+            }}
+          >
+            <div id="delete-task-title" className="mb-2 text-base font-semibold text-foreground">
+              Delete {deleteConfirmTask?.parent_task_id ? "subtask" : "task"}?
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {deleteConfirmTask?.title ?? "This action cannot be undone."}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  const taskId = deleteConfirmTaskId
+                  setDeleteConfirmTaskId(null)
+                  if (taskId) {
+                    requestAnimationFrame(() => focusTask(taskId))
+                  }
+                }}
+                autoFocus
+                ref={deleteCancelRef}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmDelete}
+                ref={deleteConfirmRef}
+              >
+                Delete
+              </Button>
+            </div>
           </div>
         </div>
       )}
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
-        const hasInputValue = Boolean(newTaskInputs[horizon.value].trim())
         const isFocused = focusedHorizon === horizon.value
 
         return (
@@ -1229,6 +1422,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                             }
                           }}
                           placeholder="Subtask title..."
+                          tabIndex={-1}
                           className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
                         />
                         <Button
@@ -1241,6 +1435,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                             setSubtaskInputValue("")
                             setSubtaskInputParentId(null)
                           }}
+                          tabIndex={-1}
                         >
                           <X className="h-4 w-4" />
                           <span className="sr-only">Cancel subtask</span>
@@ -1252,44 +1447,59 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
               })}
 
               {/* Inline task creation */}
-              <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-card/50 px-2 py-0.5">
-                <Plus className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Add a task..."
-                  value={newTaskInputs[horizon.value]}
-                  onChange={(e) =>
-                    setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: e.target.value }))
-                  }
-                  onFocus={() => setFocusedHorizon(horizon.value)}
-                  onBlur={() => {
-                    if (newTaskInputs[horizon.value].trim()) {
-                      handleCreateTask(horizon.value, newTaskInputs[horizon.value])
-                    } else {
-                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+              {isFocused ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border bg-card/50">
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <Input
+                    type="text"
+                    placeholder="Add a task..."
+                    value={newTaskInputs[horizon.value]}
+                    onChange={(e) =>
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: e.target.value }))
                     }
-                    setFocusedHorizon(null)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
+                    onBlur={() => {
                       if (newTaskInputs[horizon.value].trim()) {
-                        handleCreateTask(horizon.value, newTaskInputs[horizon.value])
-                        // Don't re-focus - let the input stay focused naturally
+                        handleCreateTask(horizon.value, newTaskInputs[horizon.value], true)
+                      } else {
+                        setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                        setFocusedHorizon(null)
+                        const lastCreated = lastCreatedTaskIdRef.current[horizon.value]
+                        if (lastCreated) {
+                          requestAnimationFrame(() => focusTask(lastCreated))
+                        }
                       }
-                    } else if (e.key === "Escape") {
-                      e.preventDefault()
-                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
-                      setFocusedHorizon(null)
-                      inputRefs.current[horizon.value]?.blur()
-                    }
-                  }}
-                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
-                  ref={(element) => {
-                    inputRefs.current[horizon.value] = element
-                  }}
-                />
-                {(isFocused || hasInputValue) && (
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        if (newTaskInputs[horizon.value].trim()) {
+                          handleCreateTask(horizon.value, newTaskInputs[horizon.value], true)
+                        }
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault()
+                        setFocusedHorizon(null)
+                        const lastCreated = lastCreatedTaskIdRef.current[horizon.value]
+                        if (lastCreated) {
+                          requestAnimationFrame(() => focusTask(lastCreated))
+                        }
+                      } else if (e.key === "Escape") {
+                        e.preventDefault()
+                        setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                        setFocusedHorizon(null)
+                        const lastCreated = lastCreatedTaskIdRef.current[horizon.value]
+                        if (lastCreated) {
+                          requestAnimationFrame(() => focusTask(lastCreated))
+                        }
+                      }
+                    }}
+                    tabIndex={-1}
+                    className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+                    ref={(element) => {
+                      inputRefs.current[horizon.value] = element
+                    }}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -1299,14 +1509,35 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     onClick={() => {
                       setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
                       setFocusedHorizon(null)
-                      inputRefs.current[horizon.value]?.blur()
+                      if (activeTaskId) {
+                        requestAnimationFrame(() => focusTask(activeTaskId))
+                      }
                     }}
+                    tabIndex={-1}
                   >
                     <X className="h-4 w-4" />
                     <span className="sr-only">Cancel</span>
                   </Button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                      setFocusedHorizon(horizon.value)
+                    }}
+                    tabIndex={-1}
+                    className="h-7 w-7 border border-dashed border-border bg-card/50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="sr-only">Add a task</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )
