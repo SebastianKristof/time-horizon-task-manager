@@ -2,7 +2,7 @@
 
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, Plus, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, CornerDownRight, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +20,7 @@ interface TaskCardProps {
   onMoveHorizon?: (task: Task, direction: "up" | "down") => void
   onEdit?: (task: Task, newTitle: string) => void
   onAddSubtask?: (task: Task) => void
+  onAddSibling?: (task: Task) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
   canMoveTop?: boolean
@@ -31,6 +32,9 @@ interface TaskCardProps {
   onFocusTask?: (taskId: string) => void
   onNavigateKey?: (event: React.KeyboardEvent<HTMLDivElement>, task: Task) => void
   taskRef?: React.Ref<HTMLDivElement>
+  isActionsOpen?: boolean
+  onOpenActions?: (taskId: string) => void
+  onCloseActions?: (taskId: string) => void
 }
 
 export function TaskCard({
@@ -47,6 +51,7 @@ export function TaskCard({
   onMoveHorizon,
   onEdit,
   onAddSubtask,
+  onAddSibling,
   canMoveUp = true,
   canMoveDown = true,
   canMoveTop = true,
@@ -58,8 +63,10 @@ export function TaskCard({
   onFocusTask,
   onNavigateKey,
   taskRef,
+  isActionsOpen = false,
+  onOpenActions,
+  onCloseActions,
 }: TaskCardProps) {
-  const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
@@ -94,6 +101,12 @@ export function TaskCard({
   }, [task.title, isEditing])
 
   useEffect(() => {
+    if (isCompactLayout && !isActionsOpen && isEditing) {
+      cancelEdit()
+    }
+  }, [isActionsOpen, isCompactLayout, isEditing])
+
+  useEffect(() => {
     const media = window.matchMedia("(max-width: 768px)")
     const handleChange = () => setIsCompactLayout(media.matches)
     handleChange()
@@ -111,6 +124,9 @@ export function TaskCard({
     setOriginalTitle(task.title)
     setEditTitle(task.title)
     setIsEditing(true)
+    if (isCompactLayout) {
+      onOpenActions?.(task.id)
+    }
   }
 
   const saveEdit = () => {
@@ -279,8 +295,14 @@ export function TaskCard({
 
   const shouldEditOnClick = () => {
     if (task.completed) return false
-    if (isCompactLayout) return true
     return lastPointerTypeRef.current !== "mouse"
+  }
+
+  const showCompactActions = isCompactLayout && (isActionsOpen || isEditing)
+
+  const closeActions = () => {
+    cancelEdit()
+    onCloseActions?.(task.id)
   }
 
   return (
@@ -304,7 +326,7 @@ export function TaskCard({
         event.preventDefault()
       }}
       onDragStart={(e) => {
-        if (isCompactLayout) {
+        if (isCompactLayout && !allowDragRef.current) {
           e.preventDefault()
           return
         }
@@ -349,10 +371,16 @@ export function TaskCard({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
+      onPointerUp={(event) => {
+        const wasLongPress = longPressTriggeredRef.current
+        handlePointerUp()
+        if (!isCompactLayout || isEditing || wasLongPress) return
+        const target = event.target as HTMLElement
+        if (target.closest("button, input, textarea, a")) return
+        onOpenActions?.(task.id)
+      }}
       onPointerCancel={handlePointerUp}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      data-task-card="true"
     >
       <div className="flex items-start gap-2">
         {/* Checkbox */}
@@ -372,33 +400,70 @@ export function TaskCard({
 
         {/* Task content */}
         <div className="flex-1">
-          {isEditing ? (
+          {showCompactActions ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <input
-                  ref={editInputRef}
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  onBlur={saveEdit}
-                  onKeyDown={handleEditKeyDown}
-                  className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
-                />
+                {isEditing ? (
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={handleEditKeyDown}
+                    className="flex-1 border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onPointerUp={(event) => {
+                      if (longPressTriggeredRef.current) {
+                        skipEditClickRef.current = false
+                        return
+                      }
+                      event.preventDefault()
+                      startEditing()
+                    }}
+                    onDoubleClick={() => {
+                      if (task.completed) return
+                      startEditing()
+                    }}
+                    tabIndex={-1}
+                    className={cn(
+                      "flex-1 text-left font-medium leading-tight text-foreground break-words",
+                      task.completed && "text-muted-foreground cursor-default",
+                    )}
+                  >
+                    {task.title}
+                  </button>
+                )}
+                {isEditing && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={saveEdit}
+                  >
+                    <Check className="h-4 w-4" />
+                    <span className="sr-only">Save</span>
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 ml-auto"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={cancelEdit}
+                  onClick={closeActions}
                 >
                   <X className="h-4 w-4" />
-                  <span className="sr-only">Cancel</span>
+                  <span className="sr-only">Close</span>
                 </Button>
               </div>
-              {/* Action buttons - second row on mobile only */}
+              {/* Action buttons - first row on mobile only */}
               {!isSubtask && onMoveHorizon && (
-                <div className="flex md:hidden flex-wrap items-center gap-1">
+                <div className="flex md:hidden flex-nowrap items-center gap-1 overflow-x-auto">
                   {[
                     { value: "now" as TimeHorizon, label: "7d" },
                     { value: "soon" as TimeHorizon, label: "30d" },
@@ -415,7 +480,6 @@ export function TaskCard({
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={async () => {
-                          // Move to target horizon by calling onMoveHorizon multiple times
                           if (steps === 0) return
                           for (let i = 0; i < steps; i++) {
                             await onMoveHorizon(task, direction)
@@ -434,8 +498,8 @@ export function TaskCard({
                   })}
                 </div>
               )}
-              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask) && (
-                <div className="flex md:hidden flex-wrap items-center gap-1.5">
+              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && (
+                <div className="flex md:hidden flex-nowrap items-center gap-1.5 overflow-x-auto">
                   {onMoveTop && (
                     <Button
                       variant="outline"
@@ -496,10 +560,22 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSubtask(task)}
                     >
-                      <Plus className="h-4 w-4" />
+                      <CornerDownRight className="h-4 w-4" />
                       <span className="hidden min-[420px]:inline">Subtask</span>
-                      <span className="hidden min-[360px]:inline min-[420px]:hidden">Sub</span>
                       <span className="sr-only">Add subtask</span>
+                    </Button>
+                  )}
+                  {onAddSibling && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onAddSibling(task)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span className="hidden min-[420px]:inline">Task</span>
+                      <span className="sr-only">Add task</span>
                     </Button>
                   )}
                   <Button 
@@ -511,16 +587,44 @@ export function TaskCard({
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="hidden min-[420px]:inline">Delete</span>
-                    <span className="hidden min-[360px]:inline min-[420px]:hidden">Del</span>
                     <span className="sr-only">Delete task</span>
                   </Button>
                 </div>
               )}
             </div>
+          ) : isEditing ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={saveEdit}
+                  onKeyDown={handleEditKeyDown}
+                  className="w-full border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={cancelEdit}
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Cancel</span>
+                </Button>
+              </div>
+            </div>
           ) : (
             <button
               type="button"
               onClick={() => {
+                if (isCompactLayout) {
+                  onOpenActions?.(task.id)
+                  return
+                }
                 if (!shouldEditOnClick()) return
                 if (skipEditClickRef.current) {
                   skipEditClickRef.current = false
@@ -530,13 +634,12 @@ export function TaskCard({
               }}
               onPointerUp={(event) => {
                 if (isCompactLayout) {
-                  if (!shouldEditOnClick()) return
                   if (skipEditClickRef.current || longPressTriggeredRef.current) {
                     skipEditClickRef.current = false
                     return
                   }
                   event.preventDefault()
-                  startEditing()
+                  onOpenActions?.(task.id)
                   return
                 }
                 if (event.pointerType === "mouse") return
@@ -553,7 +656,7 @@ export function TaskCard({
               }}
               onDoubleClick={() => {
                 if (task.completed) return
-                if (lastPointerTypeRef.current !== "mouse") return
+                if (!isCompactLayout && lastPointerTypeRef.current !== "mouse") return
                 startEditing()
               }}
               onKeyDown={(e) => {
@@ -564,7 +667,6 @@ export function TaskCard({
                 }
               }}
               tabIndex={-1}
-              data-task-title="true"
               className={cn(
                 "inline text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
                 task.completed && "text-muted-foreground cursor-default",

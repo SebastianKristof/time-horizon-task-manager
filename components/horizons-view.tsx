@@ -45,9 +45,13 @@ export function HorizonsView({
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
+  const [activeActionTaskId, setActiveActionTaskId] = useState<string | null>(null)
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
+  const [siblingInputTaskId, setSiblingInputTaskId] = useState<string | null>(null)
+  const [siblingInputValue, setSiblingInputValue] = useState("")
+  const siblingInputRef = useRef<HTMLInputElement | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ taskId: string; insertBefore: boolean } | null>(null)
   const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
     now: null,
@@ -71,6 +75,12 @@ export function HorizonsView({
       subtaskInputRef.current.focus()
     }
   }, [subtaskInputParentId])
+
+  useEffect(() => {
+    if (siblingInputTaskId && siblingInputRef.current) {
+      siblingInputRef.current.focus()
+    }
+  }, [siblingInputTaskId])
 
   useEffect(() => {
     if (!focusedHorizon) return
@@ -143,6 +153,19 @@ export function HorizonsView({
       }
     }
   }, [userId])
+
+  useEffect(() => {
+    if (!activeActionTaskId) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement
+      if (target.closest("[data-task-card='true']")) return
+      setActiveActionTaskId(null)
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
+  }, [activeActionTaskId])
 
   // Organize tasks by horizon, then by parent_task_id (NULLS FIRST), then by position
   const organizedTasks = useMemo(() => {
@@ -1117,6 +1140,94 @@ export function HorizonsView({
     }
   }
 
+  const handleAddSibling = async (siblingTask: Task, title: string, keepInputOpen: boolean = false) => {
+    if (!title.trim()) return
+
+    const supabase = createClient()
+    const isSubtask = Boolean(siblingTask.parent_task_id)
+    const siblingTasks = tasks.filter((t) => {
+      if (isSubtask) {
+        return t.parent_task_id === siblingTask.parent_task_id
+      }
+      return t.time_horizon === siblingTask.time_horizon && !t.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+
+    const newPosition = siblingTask.position + 1
+    const tasksToShift = siblingTasks.filter((t) => t.position >= newPosition && t.id !== siblingTask.id)
+
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      title: title.trim(),
+      description: null,
+      time_horizon: siblingTask.time_horizon,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      position: newPosition,
+      parent_task_id: siblingTask.parent_task_id,
+    }
+
+    setTasks((prev) => [
+      ...prev.map((t) => {
+        if (tasksToShift.some((shifted) => shifted.id === t.id)) {
+          return { ...t, position: t.position + 1 }
+        }
+        return t
+      }),
+      newTask,
+    ])
+
+    if (keepInputOpen) {
+      setSiblingInputTaskId(newTask.id)
+      setSiblingInputValue("")
+    } else {
+      requestAnimationFrame(() => focusTask(newTask.id))
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+
+    try {
+      for (const shifted of tasksToShift) {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ position: shifted.position + 1 })
+          .eq("id", shifted.id)
+        if (error) throw error
+      }
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          user_id: userId,
+          title: title.trim(),
+          description: null,
+          time_horizon: siblingTask.time_horizon,
+          completed: false,
+          parent_task_id: siblingTask.parent_task_id,
+          position: newPosition,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setTasks((prev) =>
+        prev.map((t) => (t.id === newTask.id ? (data as Task) : t)),
+      )
+      if (keepInputOpen) {
+        requestAnimationFrame(() => siblingInputRef.current?.focus())
+      }
+    } catch (err) {
+      console.error("[v0] Error creating sibling task:", err)
+      setTasks((prev) => prev.filter((t) => t.id !== newTask.id))
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+  }
+
   const handleCreateTask = async (horizon: TimeHorizon, title: string, keepInputOpen: boolean = false) => {
     if (!title.trim()) return
 
@@ -1367,6 +1478,7 @@ export function HorizonsView({
           (task) => task.time_horizon === horizon.value && !task.completed && !task.parent_task_id,
         ).length
         const isFocused = focusedHorizon === horizon.value
+        const siblingTarget = siblingInputTaskId ? tasks.find((t) => t.id === siblingInputTaskId) : null
 
         return (
           <div key={horizon.value} className="mb-8">
@@ -1436,6 +1548,7 @@ export function HorizonsView({
                 // Show input after the last subtask of a parent, or after a parent with no subtasks
                 const isParentTask = !task.parent_task_id
                 let showSubtaskInput = false
+                let showSiblingInput = false
                 
                 if (subtaskInputParentId) {
                   if (isParentTask && task.id === subtaskInputParentId) {
@@ -1447,6 +1560,18 @@ export function HorizonsView({
                     // Show input after the last subtask of this parent
                     const nextTask = horizonTasks[taskIndex + 1]
                     showSubtaskInput = !nextTask || nextTask.parent_task_id !== subtaskInputParentId
+                  }
+                }
+
+                if (siblingTarget) {
+                  if (siblingTarget.parent_task_id) {
+                    showSiblingInput = task.id === siblingTarget.id
+                  } else if (isParentTask && task.id === siblingTarget.id) {
+                    const parentSubtasks = horizonTasks.filter((t) => t.parent_task_id === task.id)
+                    showSiblingInput = parentSubtasks.length === 0
+                  } else if (isSubtask && task.parent_task_id === siblingTarget.id) {
+                    const nextTask = horizonTasks[taskIndex + 1]
+                    showSiblingInput = !nextTask || nextTask.parent_task_id !== siblingTarget.id
                   }
                 }
 
@@ -1479,6 +1604,11 @@ export function HorizonsView({
                           setSubtaskInputParentId(parentTask.id)
                           setSubtaskInputValue("")
                         }}
+                        onAddSibling={(targetTask) => {
+                          setSiblingInputTaskId(targetTask.id)
+                          setSiblingInputValue("")
+                          setActiveActionTaskId(targetTask.id)
+                        }}
                         canMoveUp={canMoveUp}
                         canMoveDown={canMoveDown}
                         canMoveTop={canMoveTop}
@@ -1489,6 +1619,17 @@ export function HorizonsView({
                         isFocused={isTaskFocused}
                         onFocusTask={setFocusedTaskId}
                         onNavigateKey={handleNavigateKey}
+                        isActionsOpen={activeActionTaskId === task.id}
+                        onOpenActions={(taskId) => {
+                          setActiveActionTaskId(taskId)
+                          setSiblingInputTaskId(null)
+                          setSiblingInputValue("")
+                        }}
+                        onCloseActions={() => {
+                          setActiveActionTaskId(null)
+                          setSiblingInputTaskId(null)
+                          setSiblingInputValue("")
+                        }}
                       />
                     </div>
                     {showDropIndicatorBelow && (
@@ -1544,6 +1685,53 @@ export function HorizonsView({
                         >
                           <X className="h-4 w-4" />
                           <span className="sr-only">Cancel subtask</span>
+                        </Button>
+                      </div>
+                    )}
+                    {showSiblingInput && siblingTarget && (
+                      <div className={cn("mt-1 flex items-center gap-2", siblingTarget.parent_task_id ? "ml-6" : "")}>
+                        <input
+                          ref={siblingInputRef}
+                          type="text"
+                          value={siblingInputValue}
+                          onChange={(e) => setSiblingInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              if (siblingInputValue.trim()) {
+                                handleAddSibling(siblingTarget, siblingInputValue, true)
+                              }
+                            } else if (e.key === "Escape") {
+                              e.preventDefault()
+                              setSiblingInputValue("")
+                              setSiblingInputTaskId(null)
+                            }
+                          }}
+                          onBlur={() => {
+                            if (siblingInputValue.trim()) {
+                              handleAddSibling(siblingTarget, siblingInputValue, false)
+                            } else {
+                              setSiblingInputTaskId(null)
+                            }
+                          }}
+                          placeholder="Task title..."
+                          tabIndex={-1}
+                          className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSiblingInputValue("")
+                            setSiblingInputTaskId(null)
+                          }}
+                          tabIndex={-1}
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Cancel sibling</span>
                         </Button>
                       </div>
                     )}
