@@ -3,7 +3,7 @@
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { cn } from "@/lib/utils"
 
 interface TaskCardProps {
@@ -56,6 +56,7 @@ export function TaskCard({
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
   const editInputRef = useRef<HTMLInputElement | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const longPressTimerRef = useRef<number | null>(null)
   const skipEditClickRef = useRef(false)
   const allowDragRef = useRef(false)
@@ -68,6 +69,13 @@ export function TaskCard({
     }
   }, [isEditing])
 
+  useEffect(() => {
+    if (!isEditing && isFocused) {
+      requestAnimationFrame(() => {
+        cardRef.current?.focus()
+      })
+    }
+  }, [isEditing, isFocused])
   useEffect(() => {
     if (!isEditing) {
       setEditTitle(task.title)
@@ -196,15 +204,25 @@ export function TaskCard({
       return
     }
 
-    if ((e.key === "a" || e.key === "A") && !isSubtask && onAddSubtask && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if ((e.key === "s" || e.key === "S") && !isSubtask && onAddSubtask && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault()
       onAddSubtask(task)
       return
     }
 
-    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && onMoveHorizon) {
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault()
-      onMoveHorizon(task, e.key === "ArrowUp" ? "up" : "down")
+      if (e.key === "ArrowUp") {
+        onMoveUp?.(task)
+      } else {
+        onMoveDown?.(task)
+      }
+      return
+    }
+
+    if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight") && onMoveHorizon) {
+      e.preventDefault()
+      onMoveHorizon(task, e.key === "ArrowLeft" ? "up" : "down")
       return
     }
 
@@ -221,21 +239,30 @@ export function TaskCard({
     onNavigateKey?.(e, task)
   }
 
+  const handleCardRef = (node: HTMLDivElement | null) => {
+    cardRef.current = node
+    if (typeof taskRef === "function") {
+      taskRef(node)
+    } else if (taskRef && "current" in taskRef) {
+      ;(taskRef as MutableRefObject<HTMLDivElement | null>).current = node
+    }
+  }
+
   return (
     <div
-      ref={taskRef}
+      ref={handleCardRef}
       className={cn(
         "group relative rounded-md px-2 py-0.5 bg-transparent transition-colors hover:bg-accent/30",
         task.completed && "opacity-60",
         "cursor-grab active:cursor-grabbing",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-within:ring-2 focus-within:ring-primary/30",
       )}
       draggable
       style={{ touchAction: "manipulation" }}
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
       aria-label={task.title}
-      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Home End A N Alt+ArrowUp Alt+ArrowDown Ctrl+Shift+ArrowUp Ctrl+Shift+ArrowDown"
+      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Home End A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight Ctrl+Shift+ArrowUp Ctrl+Shift+ArrowDown"
       onFocus={() => onFocusTask?.(task.id)}
       onKeyDown={handleKeyDown}
       onDragStart={(e) => {

@@ -18,7 +18,7 @@ const horizons: { value: TimeHorizon; label: string; description: string }[] = [
   { value: "now", label: "7 days", description: "This week" },
   { value: "soon", label: "30 days", description: "Next few weeks" },
   { value: "later", label: "180 days", description: "Next few months" },
-  { value: "someday", label: "someday", description: "No timeline" },
+  { value: "someday", label: "Someday", description: "No timeline" },
 ]
 const horizonOrder: TimeHorizon[] = ["now", "soon", "later", "someday"]
 
@@ -33,6 +33,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   })
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
@@ -163,6 +164,41 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     requestAnimationFrame(() => {
       taskRefs.current[taskId]?.focus()
     })
+  }
+
+  const getNextFocusAfterDelete = (taskId: string) => {
+    const taskToDelete = tasks.find((task) => task.id === taskId)
+    if (!taskToDelete) return defaultFocusTaskId
+
+    const horizonTasks = organizedTasks[taskToDelete.time_horizon]
+    const currentIndex = horizonTasks.findIndex((task) => task.id === taskId)
+    if (currentIndex < 0) return defaultFocusTaskId
+
+    let endIndex = currentIndex
+    if (!taskToDelete.parent_task_id) {
+      for (let i = currentIndex + 1; i < horizonTasks.length; i += 1) {
+        if (horizonTasks[i].parent_task_id === taskToDelete.id) {
+          endIndex = i
+        } else {
+          break
+        }
+      }
+    }
+
+    const nextTask = horizonTasks[endIndex + 1] ?? horizonTasks[currentIndex - 1]
+    if (nextTask) return nextTask.id
+
+    const currentHorizonIndex = horizonOrder.indexOf(taskToDelete.time_horizon)
+    for (let i = currentHorizonIndex + 1; i < horizonOrder.length; i += 1) {
+      const targetTasks = organizedTasks[horizonOrder[i]]
+      if (targetTasks.length > 0) return targetTasks[0].id
+    }
+    for (let i = currentHorizonIndex - 1; i >= 0; i -= 1) {
+      const targetTasks = organizedTasks[horizonOrder[i]]
+      if (targetTasks.length > 0) return targetTasks[0].id
+    }
+
+    return null
   }
 
   const handleDragStart = (task: Task) => {
@@ -662,6 +698,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         return t
       }),
     )
+    requestAnimationFrame(() => focusTask(task.id))
 
     try {
       // Swap positions
@@ -721,6 +758,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         return t
       }),
     )
+    requestAnimationFrame(() => focusTask(task.id))
 
     try {
       // Swap positions
@@ -772,6 +810,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         return t
       }),
     )
+    requestAnimationFrame(() => focusTask(task.id))
 
     try {
       // Update all tasks in batch
@@ -952,14 +991,14 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const handleNavigateKey = (event: KeyboardEvent<HTMLDivElement>, task: Task) => {
     const isPlainKey = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
 
-    if (isPlainKey && (event.key === "n" || event.key === "N")) {
+    if (isPlainKey && (event.key === "a" || event.key === "A")) {
       event.preventDefault()
       inputRefs.current[task.time_horizon]?.focus()
       setFocusedHorizon(task.time_horizon)
       return
     }
 
-    if (!isPlainKey) return
+    if (event.altKey || event.ctrlKey || event.metaKey) return
 
     const horizonTasks = organizedTasks[task.time_horizon]
     const currentIndex = horizonTasks.findIndex((t) => t.id === task.id)
@@ -1014,6 +1053,36 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Horizons</h1>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setIsHelpOpen((prev) => !prev)}
+          className="text-sm"
+        >
+          Keyboard help
+        </Button>
+      </div>
+      {isHelpOpen && (
+        <div className="mb-6 rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
+          <div className="mb-2 font-medium text-foreground">Shortcuts</div>
+          <div className="grid gap-1 sm:grid-cols-2">
+            <div>Up/Down: move focus</div>
+            <div>Left/Right: change horizon</div>
+            <div>Home / End: jump list</div>
+            <div>Enter: edit task</div>
+            <div>Esc: cancel edit</div>
+            <div>Space: toggle complete</div>
+            <div>A: add task</div>
+            <div>S: add subtask</div>
+            <div>Alt + Up/Down: move within list</div>
+            <div>Alt + Left/Right: move horizon</div>
+            <div>Delete: remove task</div>
+            <div>Ctrl/Cmd + Shift + Up/Down: reorder</div>
+          </div>
+        </div>
+      )}
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
         const hasInputValue = Boolean(newTaskInputs[horizon.value].trim())
