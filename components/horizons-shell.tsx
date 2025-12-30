@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import type { Task } from "@/lib/types"
 import { HorizonsView } from "@/components/horizons-view"
 import { Button } from "@/components/ui/button"
-import { Eye, EyeOff, HelpCircle, History, Moon, Plus, Settings, Sun } from "lucide-react"
+import { CheckCircle2, Eye, EyeOff, HelpCircle, Moon, Plus, RefreshCw, Settings, Sun } from "lucide-react"
 
 interface HorizonsShellProps {
   initialTasks: Task[]
@@ -15,6 +16,8 @@ interface HorizonsShellProps {
 
 export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [isRefreshing, startRefresh] = useTransition()
   const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("showCompletedTasks")
@@ -25,6 +28,11 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme, resolvedTheme } = useTheme()
   const settingsRef = useRef<HTMLDetailsElement | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    setTasks(initialTasks)
+  }, [initialTasks])
 
   useEffect(() => {
     setMounted(true)
@@ -77,6 +85,15 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
             <div className="absolute right-0 z-20 mt-2 w-64 rounded-md border border-border bg-card p-2 text-sm shadow-sm">
               <button
                 type="button"
+                onClick={() => startRefresh(() => router.refresh())}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={isRefreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                <span>Refresh data</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setTheme(isDarkTheme ? "light" : "dark")}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
               >
@@ -104,7 +121,7 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
           </details>
           <Button variant="outline" size="sm" asChild>
             <Link href="/completed" className="flex items-center gap-1.5">
-              <History className="h-4 w-4 shrink-0" />
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
               <span className="hidden min-[400px]:inline">Completed</span>
             </Link>
           </Button>
@@ -118,7 +135,7 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
       </header>
       <main className="flex-1 p-4">
         <HorizonsView
-          initialTasks={initialTasks}
+          initialTasks={tasks}
           userId={userId}
           showCompletedTasks={showCompletedTasks}
           setShowCompletedTasks={setShowCompletedTasks}
