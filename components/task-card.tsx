@@ -2,7 +2,7 @@
 
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { cn } from "@/lib/utils"
 
@@ -15,11 +15,15 @@ interface TaskCardProps {
   isSubtask?: boolean
   onMoveUp?: (task: Task) => void
   onMoveDown?: (task: Task) => void
+  onMoveTop?: (task: Task) => void
+  onMoveBottom?: (task: Task) => void
   onMoveHorizon?: (task: Task, direction: "up" | "down") => void
   onEdit?: (task: Task, newTitle: string) => void
   onAddSubtask?: (task: Task) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
+  canMoveTop?: boolean
+  canMoveBottom?: boolean
   onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
   onDragOverTask?: (targetTask: Task, insertBefore: boolean) => void
   draggedTask?: Task | null
@@ -38,11 +42,15 @@ export function TaskCard({
   isSubtask = false,
   onMoveUp,
   onMoveDown,
+  onMoveTop,
+  onMoveBottom,
   onMoveHorizon,
   onEdit,
   onAddSubtask,
   canMoveUp = true,
   canMoveDown = true,
+  canMoveTop = true,
+  canMoveBottom = true,
   onDropOnTask,
   onDragOverTask,
   draggedTask,
@@ -353,7 +361,7 @@ export function TaskCard({
               </div>
               {/* Action buttons - second row on mobile only */}
               {!isSubtask && onMoveHorizon && (
-                <div className="flex md:hidden items-center gap-1">
+                <div className="flex md:hidden flex-wrap items-center gap-1">
                   {[
                     { value: "now" as TimeHorizon, label: "7d" },
                     { value: "soon" as TimeHorizon, label: "30d" },
@@ -387,11 +395,67 @@ export function TaskCard({
                       </button>
                     )
                   })}
+                </div>
+              )}
+              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask) && (
+                <div className="flex md:hidden flex-wrap items-center gap-1.5">
+                  {onMoveTop && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveTop(task)}
+                      disabled={!canMoveTop}
+                    >
+                      <ChevronsUp className="h-4 w-4" />
+                      <span className="sr-only">Move to top</span>
+                    </Button>
+                  )}
+                  {onMoveUp && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveUp(task)}
+                      disabled={!canMoveUp}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                      <span className="sr-only">Move up</span>
+                    </Button>
+                  )}
+                  {onMoveDown && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveDown(task)}
+                      disabled={!canMoveDown}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      <span className="sr-only">Move down</span>
+                    </Button>
+                  )}
+                  {onMoveBottom && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveBottom(task)}
+                      disabled={!canMoveBottom}
+                    >
+                      <ChevronsDown className="h-4 w-4" />
+                      <span className="sr-only">Move to bottom</span>
+                    </Button>
+                  )}
                   {onAddSubtask && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 gap-1.5 px-2"
+                      className="h-7 gap-1.5 px-2 text-xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSubtask(task)}
                     >
@@ -400,14 +464,14 @@ export function TaskCard({
                     </Button>
                   )}
                   <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 ml-auto" 
+                    variant="outline" 
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onDelete(task.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete task</span>
+                    <span>Delete</span>
                   </Button>
                 </div>
               )}

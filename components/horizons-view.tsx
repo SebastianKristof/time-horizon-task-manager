@@ -877,6 +877,46 @@ export function HorizonsView({
     }
   }
 
+  const handleMoveToTop = async (task: Task) => {
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      }
+      return t.parent_task_id === task.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex <= 0) return
+
+    const targetTask = siblingTasks[0]
+    if (task.parent_task_id === null) {
+      await handleReorderWithinHorizon(task, targetTask, true)
+    } else {
+      await handleReorderSubtasks(task, targetTask, true)
+    }
+    requestAnimationFrame(() => focusTask(task.id))
+  }
+
+  const handleMoveToBottom = async (task: Task) => {
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      }
+      return t.parent_task_id === task.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex < 0 || currentIndex >= siblingTasks.length - 1) return
+
+    const targetTask = siblingTasks[siblingTasks.length - 1]
+    if (task.parent_task_id === null) {
+      await handleReorderWithinHorizon(task, targetTask, false)
+    } else {
+      await handleReorderSubtasks(task, targetTask, false)
+    }
+    requestAnimationFrame(() => focusTask(task.id))
+  }
+
   const handleMoveHorizon = async (task: Task, direction: "up" | "down") => {
     const currentIndex = horizonOrder.indexOf(task.time_horizon)
     const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1
@@ -1368,6 +1408,8 @@ export function HorizonsView({
                 // Calculate canMoveUp and canMoveDown
                 let canMoveUp = false
                 let canMoveDown = false
+                let canMoveTop = false
+                let canMoveBottom = false
                 
                 if (isSubtask) {
                   // For subtasks, check position within parent's subtasks
@@ -1378,12 +1420,16 @@ export function HorizonsView({
                   const currentSubtaskIndex = siblingSubtasks.findIndex((t) => t.id === task.id)
                   canMoveUp = currentSubtaskIndex > 0
                   canMoveDown = currentSubtaskIndex >= 0 && currentSubtaskIndex < siblingSubtasks.length - 1
+                  canMoveTop = canMoveUp
+                  canMoveBottom = canMoveDown
                 } else {
                   // For top-level tasks, check position within horizon
                   const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
                   const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
                   canMoveUp = currentTopLevelIndex > 0
                   canMoveDown = currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
+                  canMoveTop = canMoveUp
+                  canMoveBottom = canMoveDown
                 }
 
                 // Determine if we should show the subtask input after this task
@@ -1425,6 +1471,8 @@ export function HorizonsView({
                         isSubtask={isSubtask}
                         onMoveUp={handleMoveUp}
                         onMoveDown={handleMoveDown}
+                        onMoveTop={handleMoveToTop}
+                        onMoveBottom={handleMoveToBottom}
                         onMoveHorizon={handleMoveHorizon}
                         onEdit={handleEdit}
                         onAddSubtask={(parentTask) => {
@@ -1433,6 +1481,8 @@ export function HorizonsView({
                         }}
                         canMoveUp={canMoveUp}
                         canMoveDown={canMoveDown}
+                        canMoveTop={canMoveTop}
+                        canMoveBottom={canMoveBottom}
                         onDropOnTask={handleDropOnTask}
                         onDragOverTask={handleDragOverTask}
                         draggedTask={draggedTask}
