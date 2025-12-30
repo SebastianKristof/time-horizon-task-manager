@@ -387,6 +387,18 @@ export function TaskCard({
                       </button>
                     )
                   })}
+                  {onAddSubtask && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onAddSubtask(task)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Subtask</span>
+                    </Button>
+                  )}
                   <Button 
                     variant="ghost" 
                     size="icon" 
