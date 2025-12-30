@@ -451,7 +451,7 @@ export function TaskCard({
                       <span className="sr-only">Move to bottom</span>
                     </Button>
                   )}
-                  {onAddSubtask && (
+                  {!isSubtask && onAddSubtask && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -460,7 +460,9 @@ export function TaskCard({
                       onClick={() => onAddSubtask(task)}
                     >
                       <Plus className="h-4 w-4" />
-                      <span>Subtask</span>
+                      <span className="hidden min-[420px]:inline">Subtask</span>
+                      <span className="hidden min-[360px]:inline min-[420px]:hidden">Sub</span>
+                      <span className="sr-only">Add subtask</span>
                     </Button>
                   )}
                   <Button 
@@ -471,21 +473,9 @@ export function TaskCard({
                     onClick={() => onDelete(task.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                    <span>Delete</span>
-                  </Button>
-                </div>
-              )}
-              {isSubtask && (
-                <div className="flex md:hidden items-center gap-1 justify-end">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7" 
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onDelete(task.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete subtask</span>
+                    <span className="hidden min-[420px]:inline">Delete</span>
+                    <span className="hidden min-[360px]:inline min-[420px]:hidden">Del</span>
+                    <span className="sr-only">Delete task</span>
                   </Button>
                 </div>
               )}
