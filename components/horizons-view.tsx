@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
@@ -32,6 +32,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     someday: "",
   })
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
@@ -42,6 +43,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     later: null,
     someday: null,
   })
+  const taskRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     if (subtaskInputParentId && subtaskInputRef.current) {
@@ -141,6 +143,27 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     return result
   }, [tasks])
+
+  const defaultFocusTaskId = useMemo(() => {
+    for (const horizon of horizonOrder) {
+      const firstTask = organizedTasks[horizon][0]
+      if (firstTask) return firstTask.id
+    }
+    return null
+  }, [organizedTasks])
+
+  useEffect(() => {
+    if (focusedTaskId && !tasks.some((task) => task.id === focusedTaskId)) {
+      setFocusedTaskId(defaultFocusTaskId)
+    }
+  }, [focusedTaskId, tasks, defaultFocusTaskId])
+
+  const focusTask = (taskId: string) => {
+    setFocusedTaskId(taskId)
+    requestAnimationFrame(() => {
+      taskRefs.current[taskId]?.focus()
+    })
+  }
 
   const handleDragStart = (task: Task) => {
     setDraggedTask(task)
@@ -926,6 +949,69 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
+  const handleNavigateKey = (event: KeyboardEvent<HTMLDivElement>, task: Task) => {
+    const isPlainKey = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+
+    if (isPlainKey && (event.key === "n" || event.key === "N")) {
+      event.preventDefault()
+      inputRefs.current[task.time_horizon]?.focus()
+      setFocusedHorizon(task.time_horizon)
+      return
+    }
+
+    if (!isPlainKey) return
+
+    const horizonTasks = organizedTasks[task.time_horizon]
+    const currentIndex = horizonTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex < 0) return
+
+    let targetTask: Task | undefined
+
+    switch (event.key) {
+      case "ArrowUp":
+        targetTask = horizonTasks[currentIndex - 1]
+        break
+      case "ArrowDown":
+        targetTask = horizonTasks[currentIndex + 1]
+        break
+      case "Home":
+        targetTask = horizonTasks[0]
+        break
+      case "End":
+        targetTask = horizonTasks[horizonTasks.length - 1]
+        break
+      case "ArrowLeft": {
+        const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
+        const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
+        break
+      }
+      case "ArrowRight": {
+        const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
+        const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
+        break
+      }
+      default:
+        return
+    }
+
+    if (targetTask) {
+      event.preventDefault()
+      focusTask(targetTask.id)
+    }
+  }
+
+  const activeTaskId = focusedTaskId ?? defaultFocusTaskId
+
   return (
     <div className="mx-auto max-w-3xl">
       {horizons.map((horizon) => {
@@ -943,6 +1029,8 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             {/* Task list */}
             <div
               className="flex flex-col"
+              role="list"
+              aria-label={`${horizon.label} tasks`}
               onDragOver={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -958,6 +1046,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             >
               {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
+                const isTaskFocused = activeTaskId === task.id
                 
                 // Calculate canMoveUp and canMoveDown
                 let canMoveUp = false
@@ -1008,6 +1097,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     )}
                     <div className={isSubtask ? "ml-6" : ""}>
                       <TaskCard
+                        taskRef={(node) => {
+                          taskRefs.current[task.id] = node
+                        }}
                         task={task}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
@@ -1027,6 +1119,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         onDropOnTask={handleDropOnTask}
                         onDragOverTask={handleDragOverTask}
                         draggedTask={draggedTask}
+                        isFocused={isTaskFocused}
+                        onFocusTask={setFocusedTaskId}
+                        onNavigateKey={handleNavigateKey}
                       />
                     </div>
                     {showDropIndicatorBelow && (

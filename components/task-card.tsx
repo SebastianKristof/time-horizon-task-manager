@@ -23,6 +23,10 @@ interface TaskCardProps {
   onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
   onDragOverTask?: (targetTask: Task, insertBefore: boolean) => void
   draggedTask?: Task | null
+  isFocused?: boolean
+  onFocusTask?: (taskId: string) => void
+  onNavigateKey?: (event: React.KeyboardEvent<HTMLDivElement>, task: Task) => void
+  taskRef?: React.Ref<HTMLDivElement>
 }
 
 export function TaskCard({
@@ -42,6 +46,10 @@ export function TaskCard({
   onDropOnTask,
   onDragOverTask,
   draggedTask,
+  isFocused = true,
+  onFocusTask,
+  onNavigateKey,
+  taskRef,
 }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -167,15 +175,69 @@ export function TaskCard({
     onDropOnTask(task, insertBefore)
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isEditing) return
+
+    if (e.key === " " || e.key === "Spacebar") {
+      e.preventDefault()
+      onToggleComplete(task)
+      return
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault()
+      startEditing()
+      return
+    }
+
+    if ((e.key === "Backspace" || e.key === "Delete") && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault()
+      onDelete(task.id)
+      return
+    }
+
+    if ((e.key === "a" || e.key === "A") && !isSubtask && onAddSubtask && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      onAddSubtask(task)
+      return
+    }
+
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && onMoveHorizon) {
+      e.preventDefault()
+      onMoveHorizon(task, e.key === "ArrowUp" ? "up" : "down")
+      return
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault()
+      if (e.key === "ArrowUp") {
+        onMoveUp?.(task)
+      } else {
+        onMoveDown?.(task)
+      }
+      return
+    }
+
+    onNavigateKey?.(e, task)
+  }
+
   return (
     <div
+      ref={taskRef}
       className={cn(
         "group relative rounded-md px-2 py-0.5 bg-transparent transition-colors hover:bg-accent/30",
         task.completed && "opacity-60",
         "cursor-grab active:cursor-grabbing",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
       )}
       draggable
       style={{ touchAction: "manipulation" }}
+      tabIndex={isFocused ? 0 : -1}
+      role="listitem"
+      aria-label={task.title}
+      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Home End A N Alt+ArrowUp Alt+ArrowDown Ctrl+Shift+ArrowUp Ctrl+Shift+ArrowDown"
+      onFocus={() => onFocusTask?.(task.id)}
+      onKeyDown={handleKeyDown}
       onDragStart={(e) => {
         if (lastPointerTypeRef.current && lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
           e.preventDefault()
@@ -232,6 +294,7 @@ export function TaskCard({
             "mt-0.5 flex items-center justify-center size-4 rounded border",
             task.completed ? "border-transparent" : "border-muted-foreground/80 bg-transparent",
           )}
+          tabIndex={-1}
         >
           {task.completed ? (
             <Check className="h-4 w-4 text-green-600 stroke-[5]" />
@@ -345,6 +408,7 @@ export function TaskCard({
                   startEditing()
                 }
               }}
+              tabIndex={-1}
               className={cn(
                 "w-full text-left font-medium leading-tight text-foreground break-words",
                 task.completed && "text-muted-foreground cursor-default",
@@ -361,7 +425,7 @@ export function TaskCard({
         {/* Action buttons - desktop only: show on hover (never show on mobile) */}
         <div className={cn(
           "hidden md:flex items-center gap-1",
-          !isEditing && "md:invisible md:group-hover:visible"
+          !isEditing && "md:invisible md:group-hover:visible md:group-focus-within:visible"
         )}>
             {onMoveUp && (
               <Button
@@ -370,6 +434,7 @@ export function TaskCard({
                 className="h-7 w-7"
                 onClick={() => onMoveUp(task)}
                 disabled={!canMoveUp}
+                tabIndex={-1}
               >
                 <ChevronUp className="h-4 w-4" />
                 <span className="sr-only">Move up in list</span>
@@ -382,6 +447,7 @@ export function TaskCard({
                 className="h-7 w-7"
                 onClick={() => onMoveDown(task)}
                 disabled={!canMoveDown}
+                tabIndex={-1}
               >
                 <ChevronDown className="h-4 w-4" />
                 <span className="sr-only">Move down in list</span>
@@ -395,6 +461,7 @@ export function TaskCard({
                   className="h-7 w-7"
                   onClick={() => onMoveHorizon(task, "up")}
                   disabled={!canMoveHorizonUp}
+                  tabIndex={-1}
                 >
                   <ArrowUp className="h-4 w-4" />
                   <span className="sr-only">Move to earlier horizon</span>
@@ -405,6 +472,7 @@ export function TaskCard({
                   className="h-7 w-7"
                   onClick={() => onMoveHorizon(task, "down")}
                   disabled={!canMoveHorizonDown}
+                  tabIndex={-1}
                 >
                   <ArrowDown className="h-4 w-4" />
                   <span className="sr-only">Move to later horizon</span>
@@ -417,12 +485,19 @@ export function TaskCard({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => onAddSubtask(task)}
+                tabIndex={-1}
               >
                 <Plus className="h-4 w-4" />
                 <span className="sr-only">Add subtask</span>
               </Button>
             )}
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(task.id)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => onDelete(task.id)}
+              tabIndex={-1}
+            >
               <Trash2 className="h-4 w-4" />
               <span className="sr-only">Delete task</span>
             </Button>
