@@ -1,17 +1,21 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from "react"
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent, type Dispatch, type SetStateAction } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Plus, X, Eye, EyeOff } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
   initialTasks: Task[]
   userId: string
+  showCompletedTasks: boolean
+  setShowCompletedTasks: Dispatch<SetStateAction<boolean>>
+  isHelpOpen: boolean
+  setIsHelpOpen: Dispatch<SetStateAction<boolean>>
 }
 
 const horizons: { value: TimeHorizon; label: string; description: string }[] = [
@@ -22,7 +26,14 @@ const horizons: { value: TimeHorizon; label: string; description: string }[] = [
 ]
 const horizonOrder: TimeHorizon[] = ["now", "soon", "later", "someday"]
 
-export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
+export function HorizonsView({
+  initialTasks,
+  userId,
+  showCompletedTasks,
+  setShowCompletedTasks,
+  isHelpOpen,
+  setIsHelpOpen,
+}: HorizonsViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [newTaskInputs, setNewTaskInputs] = useState<Record<TimeHorizon, string>>({
@@ -33,15 +44,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   })
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
-  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
-  const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("showCompletedTasks")
-      return stored !== null ? stored === "true" : true
-    }
-    return true
-  })
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
@@ -210,13 +213,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [deleteConfirmTaskId])
-
-  // Persist showCompletedTasks to localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("showCompletedTasks", String(showCompletedTasks))
-    }
-  }, [showCompletedTasks])
 
   // Keyboard shortcut for toggling completed tasks visibility
   useEffect(() => {
@@ -1230,38 +1226,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Horizons</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setShowCompletedTasks((prev) => !prev)}
-            className="text-sm"
-            title={showCompletedTasks ? "Hide recently completed tasks" : "Show recently completed tasks"}
-          >
-            {showCompletedTasks ? (
-              <>
-                <Eye className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">Hide recently completed</span>
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">Show recently completed</span>
-              </>
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setIsHelpOpen((prev) => !prev)}
-            className="text-sm"
-          >
-            Keyboard help
-          </Button>
-        </div>
-      </div>
       {isHelpOpen && (
         <div className="mb-6 rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
           <div className="mb-2 font-medium text-foreground">Shortcuts</div>
@@ -1343,6 +1307,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       )}
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
+        const incompleteTopLevelCount = tasks.filter(
+          (task) => task.time_horizon === horizon.value && !task.completed && !task.parent_task_id,
+        ).length
         const isFocused = focusedHorizon === horizon.value
 
         return (
@@ -1351,7 +1318,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             <div className="mb-4 border-b border-border pb-2">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-semibold">{horizon.label}</h2>
-                <span className="text-xs text-muted-foreground">{horizonTasks.length}</span>
+                <span className="text-xs text-muted-foreground">{incompleteTopLevelCount}</span>
               </div>
             </div>
 
