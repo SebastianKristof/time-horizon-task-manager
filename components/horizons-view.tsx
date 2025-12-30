@@ -49,6 +49,14 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }, [subtaskInputParentId])
 
+  // Clear drop indicator when drag ends (when draggedTask becomes null)
+  useEffect(() => {
+    if (!draggedTask) {
+      setDropIndicator(null)
+      lastDropIndicatorRef.current = null
+    }
+  }, [draggedTask])
+
   useEffect(() => {
     const supabase = createClient()
 
@@ -138,13 +146,12 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     setDraggedTask(task)
   }
 
+  const lastDropIndicatorRef = useRef<{ taskId: string; insertBefore: boolean } | null>(null)
+
   const handleDragEnd = () => {
     setDraggedTask(null)
-    setDropIndicator(null)
-    lastDropIndicatorRef.current = null
+    // Drop indicator will be cleared by the useEffect when draggedTask becomes null
   }
-
-  const lastDropIndicatorRef = useRef<{ taskId: string; insertBefore: boolean } | null>(null)
 
   const handleDragOverTask = (targetTask: Task, insertBefore: boolean) => {
     if (!draggedTask || draggedTask.id === targetTask.id) {
@@ -991,13 +998,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                   }
                 }
 
-                const showDropIndicatorAbove = dropIndicator?.taskId === task.id && dropIndicator.insertBefore
-                const showDropIndicatorBelow = dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
+                const showDropIndicatorAbove = draggedTask && dropIndicator?.taskId === task.id && dropIndicator.insertBefore
+                const showDropIndicatorBelow = draggedTask && dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
 
                 return (
                   <div key={task.id}>
                     {showDropIndicatorAbove && (
-                      <div className={cn("h-0.5 bg-primary rounded-full", isSubtask ? "ml-6" : "")} />
+                      <div className={cn("h-0.5 bg-primary/30 rounded-full", isSubtask ? "ml-6" : "")} />
                     )}
                     <div className={isSubtask ? "ml-6" : ""}>
                       <TaskCard
@@ -1023,7 +1030,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                       />
                     </div>
                     {showDropIndicatorBelow && (
-                      <div className={cn("h-0.5 bg-primary rounded-full", isSubtask ? "ml-6" : "")} />
+                      <div className={cn("h-0.5 bg-primary/30 rounded-full", isSubtask ? "ml-6" : "")} />
                     )}
                     {showSubtaskInput && (
                       <div className="ml-6 mt-1 flex items-center gap-2">
