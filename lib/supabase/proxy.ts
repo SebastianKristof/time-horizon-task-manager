@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
     (request.nextUrl.pathname.startsWith("/app") ||
       request.nextUrl.pathname.startsWith("/capture") ||
       request.nextUrl.pathname.startsWith("/horizons") ||
-      request.nextUrl.pathname.startsWith("/retrospective")) &&
+      request.nextUrl.pathname.startsWith("/completed")) &&
     !user
   ) {
     const url = request.nextUrl.clone()

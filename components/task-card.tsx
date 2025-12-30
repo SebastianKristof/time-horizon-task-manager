@@ -240,6 +240,11 @@ export function TaskCard({
     }
   }
 
+  const shouldEditOnClick = () => {
+    if (task.completed) return false
+    return lastPointerTypeRef.current !== "mouse"
+  }
+
   return (
     <div
       ref={handleCardRef}
@@ -413,11 +418,16 @@ export function TaskCard({
             <button
               type="button"
               onClick={() => {
-                if (task.completed) return // Don't allow editing completed tasks
+                if (!shouldEditOnClick()) return
                 if (skipEditClickRef.current) {
                   skipEditClickRef.current = false
                   return
                 }
+                startEditing()
+              }}
+              onDoubleClick={() => {
+                if (task.completed) return
+                if (lastPointerTypeRef.current !== "mouse") return
                 startEditing()
               }}
               onKeyDown={(e) => {
@@ -429,7 +439,7 @@ export function TaskCard({
               }}
               tabIndex={-1}
               className={cn(
-                "w-full text-left font-medium leading-tight text-foreground break-words",
+                "w-full text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
                 task.completed && "text-muted-foreground cursor-default",
               )}
             >

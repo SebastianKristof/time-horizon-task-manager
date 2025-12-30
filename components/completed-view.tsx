@@ -1,30 +1,35 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef, type KeyboardEvent } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
+import { Button } from "@/components/ui/button"
 import { format, parseISO, startOfMonth } from "date-fns"
+import { cn } from "@/lib/utils"
 
-interface RetrospectiveViewProps {
+interface CompletedViewProps {
   initialTasks: Task[]
   userId: string
 }
 
-export function RetrospectiveView({ initialTasks, userId }: RetrospectiveViewProps) {
+export function CompletedView({ initialTasks, userId }: CompletedViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
+  const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
+  const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
 
     // Subscribe to real-time changes
     const channel = supabase
-      .channel("retrospective-tasks-changes")
+      .channel("completed-tasks-changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks", filter: `user_id=eq.${userId}` },
         (payload) => {
-          console.log("[v0] Retrospective real-time update:", payload)
+          console.log("[v0] Completed real-time update:", payload)
           if (payload.eventType === "UPDATE") {
             const updatedTask = payload.new as Task
             
@@ -75,9 +80,9 @@ export function RetrospectiveView({ initialTasks, userId }: RetrospectiveViewPro
       )
       .subscribe((status, err) => {
         if (err) {
-          console.error("[v0] Retrospective real-time subscription error:", err)
+          console.error("[v0] Completed real-time subscription error:", err)
         }
-        console.log("[v0] Retrospective real-time status:", status)
+        console.log("[v0] Completed real-time status:", status)
       })
 
     return () => {
@@ -192,10 +197,104 @@ export function RetrospectiveView({ initialTasks, userId }: RetrospectiveViewPro
   const handleDragStart = () => {}
   const handleDragEnd = () => {}
   const handleToggleComplete = () => {}
-  const handleDelete = () => {}
+
+  const handleDelete = (taskId: string) => {
+    setDeleteConfirmTaskId(taskId)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmTaskId) return
+    const supabase = createClient()
+
+    // Optimistic update (cascade delete will handle subtasks)
+    setTasks((prev) =>
+      prev.filter((task) => task.id !== deleteConfirmTaskId && task.parent_task_id !== deleteConfirmTaskId),
+    )
+    setDeleteConfirmTaskId(null)
+
+    try {
+      const { error } = await supabase.from("tasks").delete().eq("id", deleteConfirmTaskId)
+
+      if (error) throw error
+    } catch (err) {
+      console.error("[v0] Error deleting task:", err)
+      // Could revert here, but for delete it's better to just show an error
+    }
+  }
+
+  useEffect(() => {
+    if (!deleteConfirmTaskId) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setDeleteConfirmTaskId(null)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [deleteConfirmTaskId])
+
+  const deleteConfirmTask = deleteConfirmTaskId
+    ? tasks.find((task) => task.id === deleteConfirmTaskId)
+    : null
 
   return (
     <div className="mx-auto max-w-3xl">
+      {deleteConfirmTaskId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onMouseDown={(event) => {
+            if (event.target !== event.currentTarget) return
+            setDeleteConfirmTaskId(null)
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-task-title"
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+              event.preventDefault()
+              const next =
+                document.activeElement === deleteCancelRef.current
+                  ? deleteConfirmRef.current
+                  : deleteCancelRef.current
+              next?.focus()
+            }}
+          >
+            <div id="delete-task-title" className="mb-2 text-base font-semibold text-foreground">
+              Delete {deleteConfirmTask?.parent_task_id ? "subtask" : "task"}?
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {deleteConfirmTask?.title ?? "This action cannot be undone."}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setDeleteConfirmTaskId(null)
+                }}
+                autoFocus
+                ref={deleteCancelRef}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmDelete}
+                ref={deleteConfirmRef}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {sortedMonthKeys.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card p-12 text-center">
           <p className="text-muted-foreground">No completed tasks yet</p>

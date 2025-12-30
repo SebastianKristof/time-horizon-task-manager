@@ -6,7 +6,7 @@ import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Plus, X } from "lucide-react"
+import { Plus, X, Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
@@ -35,6 +35,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
+  const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("showCompletedTasks")
+      return stored !== null ? stored === "true" : true
+    }
+    return true
+  })
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
@@ -54,6 +61,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const taskRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
   const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
+  const lastDropIndicatorRef = useRef<{ taskId: string; insertBefore: boolean } | null>(null)
 
   useEffect(() => {
     if (subtaskInputParentId && subtaskInputRef.current) {
@@ -126,8 +134,13 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       someday: [],
     }
 
+    // Filter out completed tasks if toggle is off
+    const tasksToOrganize = showCompletedTasks 
+      ? tasks 
+      : tasks.filter((task) => !task.completed)
+
     horizons.forEach((horizon) => {
-      const horizonTasks = tasks.filter((task) => task.time_horizon === horizon.value)
+      const horizonTasks = tasksToOrganize.filter((task) => task.time_horizon === horizon.value)
       
       // Separate top-level tasks from subtasks
       const topLevelTasks = horizonTasks.filter((task) => !task.parent_task_id)
@@ -159,7 +172,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     })
 
     return result
-  }, [tasks])
+  }, [tasks, showCompletedTasks])
 
   const defaultFocusTaskId = useMemo(() => {
     for (const horizon of horizonOrder) {
@@ -197,6 +210,26 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [deleteConfirmTaskId])
+
+  // Persist showCompletedTasks to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("showCompletedTasks", String(showCompletedTasks))
+    }
+  }, [showCompletedTasks])
+
+  // Keyboard shortcut for toggling completed tasks visibility
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === "H") {
+        event.preventDefault()
+        setShowCompletedTasks((prev) => !prev)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   const getNextFocusAfterDelete = (taskId: string) => {
     const taskToDelete = tasks.find((task) => task.id === taskId)
@@ -236,8 +269,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   const handleDragStart = (task: Task) => {
     setDraggedTask(task)
   }
-
-  const lastDropIndicatorRef = useRef<{ taskId: string; insertBefore: boolean } | null>(null)
 
   const handleDragEnd = () => {
     setDraggedTask(null)
@@ -1190,14 +1221,35 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Horizons</h1>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => setIsHelpOpen((prev) => !prev)}
-          className="text-sm"
-        >
-          Keyboard help
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setShowCompletedTasks((prev) => !prev)}
+            className="text-sm"
+            title={showCompletedTasks ? "Hide recently completed tasks" : "Show recently completed tasks"}
+          >
+            {showCompletedTasks ? (
+              <>
+                <Eye className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Hide recently completed</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Show recently completed</span>
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setIsHelpOpen((prev) => !prev)}
+            className="text-sm"
+          >
+            Keyboard help
+          </Button>
+        </div>
       </div>
       {isHelpOpen && (
         <div className="mb-6 rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
@@ -1213,6 +1265,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
             <div>Alt + Up/Down: move within list</div>
             <div>Alt + Left/Right: move horizon</div>
             <div>Delete: remove task</div>
+            <div>Cmd/Ctrl + Shift + H: toggle completed tasks</div>
           </div>
         </div>
       )}

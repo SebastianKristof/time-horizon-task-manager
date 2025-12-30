@@ -31,7 +31,7 @@ export default async function HorizonsPage() {
     .order("time_horizon", { ascending: true })
     .order("position", { ascending: true })
 
-  // Filter out subtasks whose parent tasks are completed and moved to retrospective
+  // Filter out subtasks whose parent tasks are completed and moved to completed view
   // (completed more than 24 hours ago)
   const tasks = (allTasks || []).filter((task) => {
     // If it's a top-level task, include it
@@ -39,7 +39,7 @@ export default async function HorizonsPage() {
       return true
     }
     
-    // If it's a subtask, check if its parent is completed and moved to retrospective
+    // If it's a subtask, check if its parent is completed and moved to completed view
     const parentTask = allTasks?.find((t) => t.id === task.parent_task_id)
     if (!parentTask) {
       // Parent not found, include the subtask (edge case)
@@ -60,7 +60,7 @@ export default async function HorizonsPage() {
       }
     }
     
-    // Parent is completed and moved to retrospective (>24h), exclude the subtask
+    // Parent is completed and moved to completed view (>24h), exclude the subtask
     return false
   })
 
@@ -76,9 +76,9 @@ export default async function HorizonsPage() {
         <div className="flex items-center gap-2 shrink-0">
           <ThemeToggle />
           <Button variant="outline" size="sm" asChild>
-            <Link href="/retrospective" className="flex items-center gap-1.5">
+            <Link href="/completed" className="flex items-center gap-1.5">
               <History className="h-4 w-4 shrink-0" />
-              <span className="hidden min-[400px]:inline">Retrospective</span>
+              <span className="hidden min-[400px]:inline">Completed</span>
             </Link>
           </Button>
           <Button size="sm" asChild>

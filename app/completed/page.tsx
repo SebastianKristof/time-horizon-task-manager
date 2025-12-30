@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { RetrospectiveView } from "@/components/retrospective-view"
+import { CompletedView } from "@/components/completed-view"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import type { Task } from "@/lib/types"
 
-export default async function RetrospectivePage() {
+export default async function CompletedPage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -61,13 +61,13 @@ export default async function RetrospectivePage() {
             <span className="hidden min-[400px]:inline">Back to Horizons</span>
           </Link>
         </Button>
-        <h1 className="text-xl font-semibold shrink-0">Retrospective</h1>
+        <h1 className="text-xl font-semibold shrink-0">Completed</h1>
         <ThemeToggle className="shrink-0" />
       </header>
 
       {/* Main content */}
       <main className="flex-1 p-4">
-        <RetrospectiveView initialTasks={(allTasks as Task[]) || []} userId={user.id} />
+        <CompletedView initialTasks={(allTasks as Task[]) || []} userId={user.id} />
       </main>
     </div>
   )
