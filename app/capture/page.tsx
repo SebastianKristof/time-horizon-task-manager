@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { CaptureForm } from "@/components/capture-form"
 import { Button } from "@/components/ui/button"
+import { AccountActions } from "@/components/account-actions"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 
@@ -25,6 +26,7 @@ export default async function CapturePage() {
             <span className="hidden min-[400px]:inline">Back to Horizons</span>
           </Link>
         </Button>
+        <AccountActions />
       </header>
 
       {/* Main content */}

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { CompletedView } from "@/components/completed-view"
 import { Button } from "@/components/ui/button"
+import { AccountActions } from "@/components/account-actions"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
@@ -62,7 +63,10 @@ export default async function CompletedPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-semibold shrink-0">Completed</h1>
-        <ThemeToggle className="shrink-0" />
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeToggle className="shrink-0" />
+          <AccountActions />
+        </div>
       </header>
 
       {/* Main content */}

@@ -7,7 +7,8 @@ import { useTheme } from "next-themes"
 import type { Task } from "@/lib/types"
 import { HorizonsView } from "@/components/horizons-view"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Eye, EyeOff, HelpCircle, Moon, Plus, RefreshCw, Settings, Sun } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { CheckCircle2, Eye, EyeOff, HelpCircle, LogOut, Moon, Plus, RefreshCw, Settings, Sun, User } from "lucide-react"
 
 interface HorizonsShellProps {
   initialTasks: Task[]
@@ -26,6 +27,7 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
     return true
   })
   const [mounted, setMounted] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const { theme, setTheme, resolvedTheme } = useTheme()
   const settingsRef = useRef<HTMLDetailsElement | null>(null)
   const router = useRouter()
@@ -69,6 +71,13 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
 
   const isDarkTheme = mounted && (theme === "dark" || resolvedTheme === "dark")
   const themeLabel = mounted ? (isDarkTheme ? "Switch to light theme" : "Switch to dark theme") : "Theme"
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    window.location.href = "/"
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -77,7 +86,7 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
         <div className="flex items-center gap-2 shrink-0">
           <details ref={settingsRef} className="relative">
             <Button variant="ghost" size="sm" asChild>
-              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+              <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden" aria-label="Settings">
                 <Settings className="h-4 w-4" />
                 <span className="hidden min-[400px]:inline">Settings</span>
               </summary>
@@ -91,6 +100,22 @@ export function HorizonsShell({ initialTasks, userId }: HorizonsShellProps) {
               >
                 <RefreshCw className={isRefreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
                 <span>Refresh data</span>
+              </button>
+              <Link
+                href="/account"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+              >
+                <User className="h-4 w-4" />
+                <span>Account</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+                disabled={isSigningOut}
+              >
+                <LogOut className="h-4 w-4" />
+                <span>{isSigningOut ? "Signing out..." : "Sign out"}</span>
               </button>
               <button
                 type="button"
