@@ -46,10 +46,15 @@ export function CaptureForm({ userId }: CaptureFormProps) {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("[CaptureForm] handleSubmit called")
     e.preventDefault()
     
-    if (taskEntries.length === 0) return
+    if (taskEntries.length === 0) {
+      console.log("[CaptureForm] No task entries, returning early")
+      return
+    }
 
+    console.log("[CaptureForm] Submitting", taskEntries.length, "tasks")
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
@@ -65,8 +70,10 @@ export function CaptureForm({ userId }: CaptureFormProps) {
       )
 
       const horizonsToQuery = Object.keys(tasksByHorizon) as TimeHorizon[]
+      console.log("[CaptureForm] Horizons to query:", horizonsToQuery)
       const maxPositions = await Promise.all(
         horizonsToQuery.map(async (horizon) => {
+          console.log("[CaptureForm] Querying max position for horizon:", horizon)
           const { data: existingTasks } = await supabase
             .from("tasks")
             .select("position")
@@ -76,6 +83,7 @@ export function CaptureForm({ userId }: CaptureFormProps) {
             .order("position", { ascending: false })
             .limit(1)
 
+          console.log("[CaptureForm] Max position query returned:", existingTasks?.length, "tasks")
           return {
             horizon,
             maxPosition: existingTasks && existingTasks.length > 0 ? existingTasks[0].position : -1,
@@ -101,17 +109,23 @@ export function CaptureForm({ userId }: CaptureFormProps) {
         }))
       })
 
+      console.log("[CaptureForm] Tasks to insert:", tasksToInsert.length)
       // Batch insert
       const { error: insertError } = await supabase.from("tasks").insert(tasksToInsert)
 
-      if (insertError) throw insertError
+      if (insertError) {
+        console.error("[CaptureForm] Insert error:", insertError)
+        throw insertError
+      }
 
+      console.log("[CaptureForm] Submission successful, redirecting...")
       // Reset form and redirect
       setTasksText("")
       setTaskEntries([])
       router.push("/horizons")
       router.refresh()
     } catch (err) {
+      console.error("[CaptureForm] Error in handleSubmit:", err)
       setError(err instanceof Error ? err.message : "Failed to create tasks")
     } finally {
       setIsLoading(false)
@@ -119,7 +133,13 @@ export function CaptureForm({ userId }: CaptureFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+    <form 
+      onSubmit={(e) => {
+        console.log("[CaptureForm] form onSubmit event triggered")
+        handleSubmit(e)
+      }} 
+      className="flex flex-col gap-8"
+    >
       <div className="flex flex-col gap-3">
         <div className="flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={handlePaste}>
@@ -185,7 +205,13 @@ export function CaptureForm({ userId }: CaptureFormProps) {
       {error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
       <div className="flex gap-3">
-        <Button type="submit" size="lg" className="flex-1" disabled={isLoading || !tasksText.trim()}>
+        <Button 
+          type="submit" 
+          size="lg" 
+          className="flex-1" 
+          disabled={isLoading || !tasksText.trim()}
+          onClick={() => console.log("[CaptureForm] Submit button clicked")}
+        >
           {isLoading ? "Creating..." : "Add tasks"}
         </Button>
         <Button

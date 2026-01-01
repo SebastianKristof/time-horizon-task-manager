@@ -4,52 +4,52 @@ overview: Implement the comprehensive test suite outlined in TEST_PLAN.md, cover
 todos:
   - id: phase1-dependencies
     content: "Install missing dependencies: MSW, Playwright, @vitest/coverage-v8, jest-axe, @axe-core/playwright"
-    status: pending
+    status: completed
   - id: phase1-test-utilities
     content: "Create test utilities: test-helpers.tsx, mock-supabase.ts, browser-api-mocks.ts, msw-handlers.ts (optional), accessibility-helpers.ts"
-    status: pending
+    status: completed
   - id: phase1-test-notes
     content: Create tests/TEST_IMPLEMENTATION_NOTES.md to record doubts, discrepancies, and implementation decisions
-    status: pending
+    status: completed
   - id: phase1-config
     content: "Update test configuration: enhance tests/setup.ts, create playwright.config.ts, update vitest.config.ts"
-    status: pending
+    status: completed
   - id: phase2-capture-form
     content: "Complete CaptureForm tests: add missing test cases for horizon preservation, loading states, edge cases"
-    status: pending
+    status: completed
   - id: phase2-task-card
     content: "Create comprehensive TaskCard tests: rendering, editing, keyboard navigation, drag-drop, actions - test across all 3 viewport modalities (desktop wide, desktop narrow, mobile)"
-    status: pending
+    status: completed
   - id: phase2-horizons-view
     content: "Create comprehensive HorizonsView tests: rendering, organization, drag-drop, real-time updates, keyboard navigation - test across all 3 viewport modalities"
-    status: pending
+    status: completed
   - id: phase2-other-components
     content: Create tests for CompletedView, ShareSnapshotButton, and all UI components (Button, Input, Textarea, Checkbox, Label)
-    status: pending
+    status: completed
   - id: phase3-integration
     content: "Create integration tests: task management flow, bulk capture, real-time updates, authentication, snapshots"
-    status: pending
+    status: completed
   - id: phase4-e2e
     content: "Set up Playwright and create E2E tests for all user journeys: onboarding, task management, bulk capture, keyboard navigation (desktop), mobile touch, viewport responsive - test across all 3 viewport modalities"
-    status: pending
+    status: completed
   - id: phase5-api-database
     content: "Create API/Database tests: Supabase client, database operations, query performance"
-    status: pending
+    status: completed
   - id: phase6-accessibility
     content: "Create accessibility tests: keyboard navigation, screen reader support, visual accessibility"
-    status: pending
+    status: completed
   - id: phase7-performance
     content: "Create performance tests: component performance, bundle size, network performance"
-    status: pending
+    status: completed
   - id: phase8-security
     content: "Create security tests: authentication security, authorization, input validation"
-    status: pending
+    status: completed
   - id: phase9-error-edge
     content: "Create error handling and edge case tests: network errors, validation errors, database errors, edge cases"
-    status: pending
+    status: completed
   - id: phase10-cicd
     content: "Set up CI/CD pipeline: GitHub Actions workflow, pre-commit hooks, coverage configuration, update documentation"
-    status: pending
+    status: completed
 ---
 
 # Implementation Plan: Comprehensive Test Suite
