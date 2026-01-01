@@ -433,6 +433,7 @@ export function TaskCard({
             task.completed ? "border-transparent" : "border-muted-foreground/80 bg-transparent",
           )}
           tabIndex={-1}
+          title={task.completed ? "Mark incomplete" : "Mark complete"}
         >
           {task.completed ? (
             <Check className="h-4 w-4 text-green-600 stroke-[5]" />
@@ -485,6 +486,7 @@ export function TaskCard({
                     className="h-7 w-7"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={saveEdit}
+                    title="Save"
                   >
                     <Check className="h-4 w-4" />
                     <span className="sr-only">Save</span>
@@ -497,6 +499,7 @@ export function TaskCard({
                   className="h-7 w-7 ml-auto"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={closeActions}
+                  title="Close actions"
                 >
                   <X className="h-4 w-4" />
                   <span className="sr-only">Close</span>
@@ -532,6 +535,7 @@ export function TaskCard({
                             ? "border-primary bg-accent"
                             : "border-border bg-background hover:border-muted-foreground/60"
                         )}
+                        title={`Move to ${option.label}`}
                       >
                         {option.label}
                       </button>
@@ -549,6 +553,7 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveTop(task)}
                       disabled={!canMoveTop}
+                      title="Move to top"
                     >
                       <ChevronsUp className="h-4 w-4" />
                       <span className="sr-only">Move to top</span>
@@ -562,6 +567,7 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveUp(task)}
                       disabled={!canMoveUp}
+                      title="Move up"
                     >
                       <ChevronUp className="h-4 w-4" />
                       <span className="sr-only">Move up</span>
@@ -575,6 +581,7 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveDown(task)}
                       disabled={!canMoveDown}
+                      title="Move down"
                     >
                       <ChevronDown className="h-4 w-4" />
                       <span className="sr-only">Move down</span>
@@ -588,6 +595,7 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveBottom(task)}
                       disabled={!canMoveBottom}
+                      title="Move to bottom"
                     >
                       <ChevronsDown className="h-4 w-4" />
                       <span className="sr-only">Move to bottom</span>
@@ -600,6 +608,7 @@ export function TaskCard({
                       className="h-7 gap-1.5 px-2 text-xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSubtask(task)}
+                      title="Add subtask"
                     >
                       <CornerDownRight className="h-4 w-4" />
                       <span className="hidden min-[420px]:inline">Subtask</span>
@@ -613,6 +622,7 @@ export function TaskCard({
                       className="h-7 gap-1.5 px-2 text-xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSibling(task)}
+                      title="Add task"
                     >
                       <Plus className="h-4 w-4" />
                       <span className="hidden min-[420px]:inline">Task</span>
@@ -625,6 +635,7 @@ export function TaskCard({
                     className="h-7 gap-1.5 px-2 text-xs"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onDelete(task.id)}
+                    title="Delete task"
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="hidden min-[420px]:inline">Delete</span>
@@ -652,6 +663,7 @@ export function TaskCard({
                   className="h-7 w-7"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={cancelEdit}
+                  title="Cancel edit"
                 >
                   <X className="h-4 w-4" />
                   <span className="sr-only">Cancel</span>
@@ -734,6 +746,7 @@ export function TaskCard({
                 onClick={() => onMoveUp(task)}
                 disabled={!canMoveUp}
                 tabIndex={-1}
+                title="Move up in list"
               >
                 <ChevronUp className="h-4 w-4" />
                 <span className="sr-only">Move up in list</span>
@@ -747,6 +760,7 @@ export function TaskCard({
                 onClick={() => onMoveDown(task)}
                 disabled={!canMoveDown}
                 tabIndex={-1}
+                title="Move down in list"
               >
                 <ChevronDown className="h-4 w-4" />
                 <span className="sr-only">Move down in list</span>
@@ -761,6 +775,7 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "up")}
                   disabled={!canMoveHorizonUp}
                   tabIndex={-1}
+                  title="Move to earlier horizon"
                 >
                   <ArrowUp className="h-4 w-4" />
                   <span className="sr-only">Move to earlier horizon</span>
@@ -772,6 +787,7 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "down")}
                   disabled={!canMoveHorizonDown}
                   tabIndex={-1}
+                  title="Move to later horizon"
                 >
                   <ArrowDown className="h-4 w-4" />
                   <span className="sr-only">Move to later horizon</span>
@@ -785,9 +801,36 @@ export function TaskCard({
                 className="h-7 w-7"
                 onClick={() => onAddSubtask(task)}
                 tabIndex={-1}
+                title="Add subtask"
+              >
+                <CornerDownRight className="h-4 w-4" />
+                <span className="sr-only">Add subtask</span>
+              </Button>
+            )}
+            {!isSubtask && onAddSibling && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => onAddSibling(task)}
+                tabIndex={-1}
+                title="Add sibling task"
               >
                 <Plus className="h-4 w-4" />
-                <span className="sr-only">Add subtask</span>
+                <span className="sr-only">Add sibling task</span>
+              </Button>
+            )}
+            {isSubtask && onAddSibling && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => onAddSibling(task)}
+                tabIndex={-1}
+                title="Add sibling subtask"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="sr-only">Add sibling subtask</span>
               </Button>
             )}
             <Button
@@ -796,6 +839,7 @@ export function TaskCard({
               className="h-7 w-7"
               onClick={() => onDelete(task.id)}
               tabIndex={-1}
+              title="Delete task"
             >
               <Trash2 className="h-4 w-4" />
               <span className="sr-only">Delete task</span>

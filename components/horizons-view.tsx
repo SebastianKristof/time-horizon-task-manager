@@ -1131,7 +1131,9 @@ export function HorizonsView({
     // Optimistic update
     setTasks((prev) => [...prev, newSubtask])
     setSubtaskInputValue("")
-    requestAnimationFrame(() => focusTask(newSubtask.id))
+    if (!keepInputOpen) {
+      requestAnimationFrame(() => focusTask(newSubtask.id))
+    }
 
     try {
       const { data, error } = await supabase
@@ -1160,7 +1162,9 @@ export function HorizonsView({
         // Replace temp task with real one
         return prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t))
       })
-      requestAnimationFrame(() => focusTask((data as Task).id))
+      if (!keepInputOpen) {
+        requestAnimationFrame(() => focusTask((data as Task).id))
+      }
 
       // Keep input open if requested (for Enter key behavior)
       if (keepInputOpen) {
@@ -1172,7 +1176,9 @@ export function HorizonsView({
       console.error("[v0] Error creating subtask:", err)
       // Revert
       setTasks((prev) => prev.filter((t) => t.id !== newSubtask.id))
-      setSubtaskInputParentId(null)
+      if (!keepInputOpen) {
+        setSubtaskInputParentId(null)
+      }
     }
   }
 
@@ -1504,6 +1510,7 @@ export function HorizonsView({
                 }}
                 autoFocus
                 ref={deleteCancelRef}
+                title="Cancel delete"
               >
                 Cancel
               </Button>
@@ -1512,6 +1519,7 @@ export function HorizonsView({
                 variant="destructive"
                 onClick={confirmDelete}
                 ref={deleteConfirmRef}
+                title="Delete task"
               >
                 Delete
               </Button>
@@ -1748,40 +1756,42 @@ export function HorizonsView({
                             tabIndex={-1}
                             className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
                           />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 md:hidden"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              if (subtaskInputValue.trim() && subtaskInputParentId) {
-                                const parentTask = horizonTasks.find((t) => t.id === subtaskInputParentId)
-                                if (parentTask) {
-                                  handleAddSubtask(parentTask, subtaskInputValue, false)
-                                }
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 md:hidden"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            if (subtaskInputValue.trim() && subtaskInputParentId) {
+                              const parentTask = horizonTasks.find((t) => t.id === subtaskInputParentId)
+                              if (parentTask) {
+                                handleAddSubtask(parentTask, subtaskInputValue, false)
                               }
-                            }}
-                            tabIndex={-1}
-                          >
-                            <Check className="h-4 w-4" />
-                            <span className="sr-only">Accept subtask</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setSubtaskInputValue("")
-                              setSubtaskInputParentId(null)
-                            }}
-                            tabIndex={-1}
-                          >
-                            <X className="h-4 w-4" />
-                            <span className="sr-only">Cancel subtask</span>
-                          </Button>
+                            }
+                          }}
+                          tabIndex={-1}
+                          title="Add subtask"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span className="sr-only">Accept subtask</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSubtaskInputValue("")
+                            setSubtaskInputParentId(null)
+                          }}
+                          tabIndex={-1}
+                          title="Cancel subtask"
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Cancel subtask</span>
+                        </Button>
                         </div>
                       )}
                       {showSiblingInput && siblingTarget && (
@@ -1814,21 +1824,22 @@ export function HorizonsView({
                             tabIndex={-1}
                             className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
                           />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setSiblingInputValue("")
-                              setSiblingInputTaskId(null)
-                            }}
-                            tabIndex={-1}
-                          >
-                            <X className="h-4 w-4" />
-                            <span className="sr-only">Cancel sibling</span>
-                          </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSiblingInputValue("")
+                            setSiblingInputTaskId(null)
+                          }}
+                          tabIndex={-1}
+                          title="Cancel sibling"
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Cancel sibling</span>
+                        </Button>
                         </div>
                       )}
                     </div>
@@ -1905,43 +1916,45 @@ export function HorizonsView({
                       <Check className="h-4 w-4" />
                       <span className="sr-only">Accept task</span>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
-                        setFocusedHorizon(null)
-                        if (activeTaskId) {
-                          requestAnimationFrame(() => focusTask(activeTaskId))
-                        }
-                      }}
-                      tabIndex={-1}
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Cancel</span>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
-                        setFocusedHorizon(horizon.value)
-                      }}
-                      tabIndex={-1}
-                      className="h-7 w-7 border border-dashed border-border bg-card/50"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span className="sr-only">Add a task</span>
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                      setFocusedHorizon(null)
+                      if (activeTaskId) {
+                        requestAnimationFrame(() => focusTask(activeTaskId))
+                      }
+                    }}
+                    tabIndex={-1}
+                    title="Cancel"
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Cancel</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setNewTaskInputs((prev) => ({ ...prev, [horizon.value]: "" }))
+                      setFocusedHorizon(horizon.value)
+                    }}
+                    tabIndex={-1}
+                    className="h-7 w-7 border border-dashed border-border bg-card/50"
+                    title="Add a task"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="sr-only">Add a task</span>
+                  </Button>
+                </div>
                 )}
               </div>
             )}
