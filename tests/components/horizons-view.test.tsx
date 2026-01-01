@@ -158,6 +158,33 @@ describe('HorizonsView', () => {
     })
   })
 
+  describe('Plain Text View', () => {
+    it('shows markdown-style text for tasks and subtasks', async () => {
+      const user = userEvent.setup()
+      const parentTask = createTestTask({
+        id: 'parent-plain',
+        title: 'Parent Task',
+        time_horizon: 'now',
+        position: 0,
+      })
+      const subtask = createTestTask({
+        id: 'subtask-plain',
+        title: 'Subtask',
+        time_horizon: 'now',
+        position: 1,
+        parent_task_id: 'parent-plain',
+      })
+
+      render(<HorizonsView {...defaultProps} initialTasks={[parentTask, subtask]} />)
+
+      const plainTextButtons = screen.getAllByLabelText(/plain text view/i)
+      await user.click(plainTextButtons[0])
+
+      const expectedText = "- Parent Task\n  - Subtask"
+      expect(screen.getByDisplayValue(expectedText)).toBeInTheDocument()
+    })
+  })
+
   describe('Task Creation', () => {
     it('creates new task in correct horizon', async () => {
       const user = userEvent.setup()
