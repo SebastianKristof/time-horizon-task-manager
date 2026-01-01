@@ -205,20 +205,46 @@ export function CompletedView({ initialTasks, userId }: CompletedViewProps) {
   const confirmDelete = async () => {
     if (!deleteConfirmTaskId) return
     const supabase = createClient()
+    const taskIdToDelete = deleteConfirmTaskId
 
     // Optimistic update (cascade delete will handle subtasks)
     setTasks((prev) =>
-      prev.filter((task) => task.id !== deleteConfirmTaskId && task.parent_task_id !== deleteConfirmTaskId),
+      prev.filter((task) => task.id !== taskIdToDelete && task.parent_task_id !== taskIdToDelete),
     )
     setDeleteConfirmTaskId(null)
 
     try {
-      const { error } = await supabase.from("tasks").delete().eq("id", deleteConfirmTaskId)
+      const { error } = await supabase.from("tasks").delete().eq("id", taskIdToDelete)
 
-      if (error) throw error
+      if (error) {
+        throw error
+      }
     } catch (err) {
       console.error("[v0] Error deleting task:", err)
-      // Could revert here, but for delete it's better to just show an error
+      // Revert on error - refetch tasks
+      const { data: allTasks } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("completed", true)
+        .order("completed_at", { ascending: false })
+      
+      if (allTasks) {
+        const completedTaskIds = allTasks.map((t) => t.id)
+        if (completedTaskIds.length > 0) {
+          const { data: subtasks } = await supabase
+            .from("tasks")
+            .select("*")
+            .eq("user_id", userId)
+            .in("parent_task_id", completedTaskIds)
+          
+          const existingIds = new Set(allTasks.map((t) => t.id))
+          const newSubtasks = (subtasks || []).filter((t) => !existingIds.has(t.id))
+          setTasks([...allTasks, ...newSubtasks] as Task[])
+        } else {
+          setTasks(allTasks as Task[])
+        }
+      }
     }
   }
 

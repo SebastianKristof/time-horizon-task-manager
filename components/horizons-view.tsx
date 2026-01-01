@@ -6,7 +6,7 @@ import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { FileText, Plus, X } from "lucide-react"
+import { Check, FileText, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
@@ -54,6 +54,7 @@ export function HorizonsView({
   const [siblingInputValue, setSiblingInputValue] = useState("")
   const siblingInputRef = useRef<HTMLInputElement | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ taskId: string; insertBefore: boolean } | null>(null)
+  const [fadingOutTasks, setFadingOutTasks] = useState<Set<string>>(new Set())
   const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
     now: null,
     soon: null,
@@ -177,10 +178,10 @@ export function HorizonsView({
       someday: [],
     }
 
-    // Filter out completed tasks if toggle is off
+    // Filter out completed tasks if toggle is off, but keep tasks that are fading out
     const tasksToOrganize = showCompletedTasks 
       ? tasks 
-      : tasks.filter((task) => !task.completed)
+      : tasks.filter((task) => !task.completed || fadingOutTasks.has(task.id))
 
     horizons.forEach((horizon) => {
       const horizonTasks = tasksToOrganize.filter((task) => task.time_horizon === horizon.value)
@@ -308,7 +309,8 @@ export function HorizonsView({
 
   const handleDragEnd = () => {
     setDraggedTask(null)
-    // Drop indicator will be cleared by the useEffect when draggedTask becomes null
+    setDropIndicator(null)
+    lastDropIndicatorRef.current = null
   }
 
   const handleDragOverTask = (targetTask: Task, insertBefore: boolean) => {
@@ -350,6 +352,7 @@ export function HorizonsView({
     if (!draggedTask || draggedTask.id === targetTask.id) {
       setDraggedTask(null)
       setDropIndicator(null)
+      lastDropIndicatorRef.current = null
       return
     }
 
@@ -360,11 +363,13 @@ export function HorizonsView({
         await handleReorderSubtasks(draggedTask, targetTask, insertBefore)
         setDraggedTask(null)
         setDropIndicator(null)
+        lastDropIndicatorRef.current = null
         return
       } else {
         // Different parents - don't allow
         setDraggedTask(null)
         setDropIndicator(null)
+        lastDropIndicatorRef.current = null
         return
       }
     }
@@ -373,6 +378,7 @@ export function HorizonsView({
     if (draggedTask.parent_task_id !== null || targetTask.parent_task_id !== null) {
       setDraggedTask(null)
       setDropIndicator(null)
+      lastDropIndicatorRef.current = null
       return
     }
 
@@ -381,12 +387,14 @@ export function HorizonsView({
       await handleReorderWithinHorizon(draggedTask, targetTask, insertBefore)
       setDraggedTask(null)
       setDropIndicator(null)
+      lastDropIndicatorRef.current = null
       return
     }
 
     // Different horizon - move to new horizon at specific position
     await handleDropToHorizonAtPosition(targetTask.time_horizon, targetTask, insertBefore)
     setDropIndicator(null)
+    lastDropIndicatorRef.current = null
   }
 
   const handleReorderSubtasks = async (draggedTask: Task, targetTask: Task, insertBefore: boolean) => {
@@ -654,6 +662,7 @@ export function HorizonsView({
     if (!draggedTask || draggedTask.time_horizon === targetHorizon) {
       setDraggedTask(null)
       setDropIndicator(null)
+      lastDropIndicatorRef.current = null
       return
     }
 
@@ -719,11 +728,26 @@ export function HorizonsView({
     }
 
     setDraggedTask(null)
+    setDropIndicator(null)
+    lastDropIndicatorRef.current = null
   }
 
   const handleToggleComplete = async (task: Task) => {
     const supabase = createClient()
     const newCompleted = !task.completed
+
+    // If task is being completed and showCompletedTasks is false, add to fade-out
+    if (newCompleted && !showCompletedTasks) {
+      setFadingOutTasks((prev) => new Set(prev).add(task.id))
+      // Remove from fade-out after animation completes
+      setTimeout(() => {
+        setFadingOutTasks((prev) => {
+          const next = new Set(prev)
+          next.delete(task.id)
+          return next
+        })
+      }, 300)
+    }
 
     // Optimistic update
     setTasks((prev) =>
@@ -748,6 +772,11 @@ export function HorizonsView({
       console.error("[v0] Error toggling task completion:", err)
       // Revert on error
       setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
+      setFadingOutTasks((prev) => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
     }
   }
 
@@ -1121,10 +1150,16 @@ export function HorizonsView({
 
       if (error) throw error
 
-      // Update with real ID from server
-      setTasks((prev) =>
-        prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t)),
-      )
+      // Update with real ID from server, but check if real-time already added it
+      setTasks((prev) => {
+        const existingTask = prev.find((t) => t.id === (data as Task).id)
+        if (existingTask) {
+          // Real-time subscription already added it, just remove the temp one
+          return prev.filter((t) => t.id !== newSubtask.id)
+        }
+        // Replace temp task with real one
+        return prev.map((t) => (t.id === newSubtask.id ? (data as Task) : t))
+      })
       requestAnimationFrame(() => focusTask((data as Task).id))
 
       // Keep input open if requested (for Enter key behavior)
@@ -1618,8 +1653,10 @@ export function HorizonsView({
                   const showDropIndicatorAbove = draggedTask && dropIndicator?.taskId === task.id && dropIndicator.insertBefore
                   const showDropIndicatorBelow = draggedTask && dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
 
+                  const isFadingOut = fadingOutTasks.has(task.id)
+
                   return (
-                    <div key={task.id}>
+                    <div key={task.id} className={isFadingOut ? "task-fade-out" : ""}>
                       {showDropIndicatorAbove && (
                         <div className={cn("h-0.5 bg-primary/30 rounded-full", isSubtask ? "ml-6" : "")} />
                       )}
@@ -1715,6 +1752,25 @@ export function HorizonsView({
                             type="button"
                             variant="ghost"
                             size="icon"
+                            className="h-7 w-7 md:hidden"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              if (subtaskInputValue.trim() && subtaskInputParentId) {
+                                const parentTask = horizonTasks.find((t) => t.id === subtaskInputParentId)
+                                if (parentTask) {
+                                  handleAddSubtask(parentTask, subtaskInputValue, false)
+                                }
+                              }
+                            }}
+                            tabIndex={-1}
+                          >
+                            <Check className="h-4 w-4" />
+                            <span className="sr-only">Accept subtask</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7"
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
@@ -1754,7 +1810,7 @@ export function HorizonsView({
                                 setSiblingInputTaskId(null)
                               }
                             }}
-                            placeholder="Task title..."
+                            placeholder={siblingTarget.parent_task_id ? "Subtask title..." : "Task title..."}
                             tabIndex={-1}
                             className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
                           />
@@ -1833,6 +1889,22 @@ export function HorizonsView({
                         inputRefs.current[horizon.value] = element
                       }}
                     />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 md:hidden"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        if (newTaskInputs[horizon.value].trim()) {
+                          handleCreateTask(horizon.value, newTaskInputs[horizon.value], true)
+                        }
+                      }}
+                      tabIndex={-1}
+                    >
+                      <Check className="h-4 w-4" />
+                      <span className="sr-only">Accept task</span>
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"

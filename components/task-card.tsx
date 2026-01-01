@@ -335,21 +335,55 @@ export function TaskCard({
           return
         }
         
-        // Create a custom drag image that appears on the right side
+        // Add visual feedback to the original card
+        if (cardRef.current) {
+          cardRef.current.style.opacity = "0.5"
+          cardRef.current.style.transform = "scale(0.95)"
+        }
+        
+        // Create a custom drag image that matches the task card
         const dragImage = document.createElement("div")
         dragImage.style.position = "absolute"
         dragImage.style.top = "-1000px"
         dragImage.style.left = "-1000px"
-        dragImage.style.width = "200px"
+        
+        // Get the actual card dimensions for better visual feedback
+        const cardRect = cardRef.current?.getBoundingClientRect()
+        const cardWidth = cardRect ? Math.min(cardRect.width, 300) : 250
+        
+        dragImage.style.width = `${cardWidth}px`
         dragImage.style.padding = "8px 12px"
         dragImage.style.backgroundColor = "hsl(var(--background))"
         dragImage.style.border = "1px solid hsl(var(--border))"
         dragImage.style.borderRadius = "6px"
-        dragImage.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
+        dragImage.style.boxShadow = "0 8px 16px rgba(0, 0, 0, 0.2)"
         dragImage.style.fontSize = "14px"
         dragImage.style.fontWeight = "500"
         dragImage.style.color = "hsl(var(--foreground))"
-        dragImage.textContent = task.title
+        dragImage.style.display = "flex"
+        dragImage.style.alignItems = "center"
+        dragImage.style.gap = "8px"
+        
+        // Add checkbox visual
+        const checkbox = document.createElement("div")
+        checkbox.style.width = "16px"
+        checkbox.style.height = "16px"
+        checkbox.style.border = task.completed ? "none" : "1px solid hsl(var(--muted-foreground))"
+        checkbox.style.borderRadius = "4px"
+        checkbox.style.flexShrink = "0"
+        if (task.completed) {
+          checkbox.style.backgroundColor = "hsl(var(--primary))"
+        }
+        
+        const text = document.createElement("span")
+        text.textContent = task.title
+        text.style.flex = "1"
+        text.style.overflow = "hidden"
+        text.style.textOverflow = "ellipsis"
+        text.style.whiteSpace = "nowrap"
+        
+        dragImage.appendChild(checkbox)
+        dragImage.appendChild(text)
         document.body.appendChild(dragImage)
         
         // Set the drag image offset to the right (positive x offset)
@@ -358,12 +392,19 @@ export function TaskCard({
         
         // Clean up after a short delay
         setTimeout(() => {
-          document.body.removeChild(dragImage)
+          if (document.body.contains(dragImage)) {
+            document.body.removeChild(dragImage)
+          }
         }, 0)
         
         onDragStart(task)
       }}
       onDragEnd={() => {
+        // Restore original card appearance
+        if (cardRef.current) {
+          cardRef.current.style.opacity = ""
+          cardRef.current.style.transform = ""
+        }
         allowDragRef.current = false
         skipEditClickRef.current = false
         onDragEnd()
@@ -462,7 +503,7 @@ export function TaskCard({
                 </Button>
               </div>
               {/* Action buttons - first row on mobile only */}
-              {!isSubtask && onMoveHorizon && (
+              {!isSubtask && onMoveHorizon && !isEditing && (
                 <div className="flex md:hidden flex-nowrap items-center gap-1 overflow-x-auto">
                   {[
                     { value: "now" as TimeHorizon, label: "7d" },
@@ -498,7 +539,7 @@ export function TaskCard({
                   })}
                 </div>
               )}
-              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && (
+              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && !isEditing && (
                 <div className="flex md:hidden flex-nowrap items-center gap-1.5 overflow-x-auto">
                   {onMoveTop && (
                     <Button
