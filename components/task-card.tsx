@@ -2,7 +2,7 @@
 
 import type { Task, TimeHorizon } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, ChevronUp, Plus, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, CornerDownRight, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import { cn } from "@/lib/utils"
 
@@ -13,16 +13,18 @@ interface TaskCardProps {
   onToggleComplete: (task: Task) => void
   onDelete: (taskId: string) => void
   isSubtask?: boolean
-  hasSubtasks?: boolean
-  isCollapsed?: boolean
-  onToggleCollapse?: (taskId: string, nextCollapsed?: boolean) => void
   onMoveUp?: (task: Task) => void
   onMoveDown?: (task: Task) => void
+  onMoveTop?: (task: Task) => void
+  onMoveBottom?: (task: Task) => void
   onMoveHorizon?: (task: Task, direction: "up" | "down") => void
   onEdit?: (task: Task, newTitle: string) => void
   onAddSubtask?: (task: Task) => void
+  onAddSibling?: (task: Task) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
+  canMoveTop?: boolean
+  canMoveBottom?: boolean
   onDropOnTask?: (targetTask: Task, insertBefore: boolean) => void
   onDragOverTask?: (targetTask: Task, insertBefore: boolean) => void
   draggedTask?: Task | null
@@ -30,6 +32,9 @@ interface TaskCardProps {
   onFocusTask?: (taskId: string) => void
   onNavigateKey?: (event: React.KeyboardEvent<HTMLDivElement>, task: Task) => void
   taskRef?: React.Ref<HTMLDivElement>
+  isActionsOpen?: boolean
+  onOpenActions?: (taskId: string) => void
+  onCloseActions?: (taskId: string) => void
 }
 
 export function TaskCard({
@@ -39,16 +44,18 @@ export function TaskCard({
   onToggleComplete,
   onDelete,
   isSubtask = false,
-  hasSubtasks = false,
-  isCollapsed = false,
-  onToggleCollapse,
   onMoveUp,
   onMoveDown,
+  onMoveTop,
+  onMoveBottom,
   onMoveHorizon,
   onEdit,
   onAddSubtask,
+  onAddSibling,
   canMoveUp = true,
   canMoveDown = true,
+  canMoveTop = true,
+  canMoveBottom = true,
   onDropOnTask,
   onDragOverTask,
   draggedTask,
@@ -56,17 +63,21 @@ export function TaskCard({
   onFocusTask,
   onNavigateKey,
   taskRef,
+  isActionsOpen = false,
+  onOpenActions,
+  onCloseActions,
 }: TaskCardProps) {
-  const [showActions, setShowActions] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(task.title)
   const [originalTitle, setOriginalTitle] = useState(task.title)
+  const [isCompactLayout, setIsCompactLayout] = useState(false)
   const editInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const longPressTimerRef = useRef<number | null>(null)
   const skipEditClickRef = useRef(false)
   const allowDragRef = useRef(false)
   const lastPointerTypeRef = useRef<"mouse" | "touch" | "pen" | null>(null)
+  const longPressTriggeredRef = useRef(false)
 
   useEffect(() => {
     if (isEditing && editInputRef.current) {
@@ -76,7 +87,7 @@ export function TaskCard({
   }, [isEditing])
 
   useEffect(() => {
-    if (!isEditing && isFocused) {
+    if (!isEditing && isFocused && !isCompactLayout) {
       requestAnimationFrame(() => {
         cardRef.current?.focus()
       })
@@ -89,12 +100,33 @@ export function TaskCard({
     }
   }, [task.title, isEditing])
 
+  useEffect(() => {
+    if (isCompactLayout && !isActionsOpen && isEditing) {
+      cancelEdit()
+    }
+  }, [isActionsOpen, isCompactLayout, isEditing])
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 768px)")
+    const handleChange = () => setIsCompactLayout(media.matches)
+    handleChange()
+    if (media.addEventListener) {
+      media.addEventListener("change", handleChange)
+      return () => media.removeEventListener("change", handleChange)
+    }
+    media.addListener(handleChange)
+    return () => media.removeListener(handleChange)
+  }, [])
+
 
   const startEditing = () => {
     if (isEditing || task.completed) return // Don't allow editing completed tasks
     setOriginalTitle(task.title)
     setEditTitle(task.title)
     setIsEditing(true)
+    if (isCompactLayout) {
+      onOpenActions?.(task.id)
+    }
   }
 
   const saveEdit = () => {
@@ -137,7 +169,20 @@ export function TaskCard({
     if (isEditing) return
     lastPointerTypeRef.current = e.pointerType
     skipEditClickRef.current = false
-    if (e.pointerType === "mouse") {
+    if (isCompactLayout) {
+      allowDragRef.current = false
+      longPressTriggeredRef.current = false
+      if (longPressTimerRef.current) {
+        window.clearTimeout(longPressTimerRef.current)
+      }
+      longPressTimerRef.current = window.setTimeout(() => {
+        allowDragRef.current = true
+        longPressTriggeredRef.current = true
+        skipEditClickRef.current = true
+      }, 220)
+      return
+    }
+    if (e.pointerType === "mouse" && !isCompactLayout) {
       allowDragRef.current = true
       return
     }
@@ -156,6 +201,8 @@ export function TaskCard({
       window.clearTimeout(longPressTimerRef.current)
     }
     allowDragRef.current = false
+    longPressTriggeredRef.current = false
+    skipEditClickRef.current = false
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -193,12 +240,6 @@ export function TaskCard({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditing) return
-
-    if (hasSubtasks && onToggleCollapse && e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-      e.preventDefault()
-      onToggleCollapse(task.id, e.key === "ArrowLeft")
-      return
-    }
 
     if (e.key === " " || e.key === "Spacebar") {
       e.preventDefault()
@@ -257,6 +298,13 @@ export function TaskCard({
     return lastPointerTypeRef.current !== "mouse"
   }
 
+  const showCompactActions = isCompactLayout && (isActionsOpen || isEditing)
+
+  const closeActions = () => {
+    cancelEdit()
+    onCloseActions?.(task.id)
+  }
+
   return (
     <div
       ref={handleCardRef}
@@ -271,10 +319,17 @@ export function TaskCard({
       tabIndex={isFocused ? 0 : -1}
       role="listitem"
       aria-label={task.title}
-      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
+      aria-keyshortcuts="Enter Space ArrowUp ArrowDown ArrowLeft ArrowRight A S Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
       onFocus={() => onFocusTask?.(task.id)}
       onKeyDown={handleKeyDown}
+      onContextMenu={(event) => {
+        event.preventDefault()
+      }}
       onDragStart={(e) => {
+        if (isCompactLayout && !allowDragRef.current) {
+          e.preventDefault()
+          return
+        }
         if (lastPointerTypeRef.current && lastPointerTypeRef.current !== "mouse" && !allowDragRef.current) {
           e.preventDefault()
           return
@@ -316,10 +371,16 @@ export function TaskCard({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
+      onPointerUp={(event) => {
+        const wasLongPress = longPressTriggeredRef.current
+        handlePointerUp()
+        if (!isCompactLayout || isEditing || wasLongPress) return
+        const target = event.target as HTMLElement
+        if (target.closest("button, input, textarea, a")) return
+        onOpenActions?.(task.id)
+      }}
       onPointerCancel={handlePointerUp}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      data-task-card="true"
     >
       <div className="flex items-start gap-2">
         {/* Checkbox */}
@@ -339,7 +400,199 @@ export function TaskCard({
 
         {/* Task content */}
         <div className="flex-1">
-          {isEditing ? (
+          {showCompactActions ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                {isEditing ? (
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={handleEditKeyDown}
+                    className="flex-1 border-b border-primary bg-transparent font-medium outline-none focus:border-primary"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onPointerUp={(event) => {
+                      if (longPressTriggeredRef.current) {
+                        skipEditClickRef.current = false
+                        return
+                      }
+                      event.preventDefault()
+                      startEditing()
+                    }}
+                    onDoubleClick={() => {
+                      if (task.completed) return
+                      startEditing()
+                    }}
+                    tabIndex={-1}
+                    className={cn(
+                      "flex-1 text-left font-medium leading-tight text-foreground break-words",
+                      task.completed && "text-muted-foreground cursor-default",
+                    )}
+                  >
+                    {task.title}
+                  </button>
+                )}
+                {isEditing && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={saveEdit}
+                  >
+                    <Check className="h-4 w-4" />
+                    <span className="sr-only">Save</span>
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 ml-auto"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={closeActions}
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </div>
+              {/* Action buttons - first row on mobile only */}
+              {!isSubtask && onMoveHorizon && (
+                <div className="flex md:hidden flex-nowrap items-center gap-1 overflow-x-auto">
+                  {[
+                    { value: "now" as TimeHorizon, label: "7d" },
+                    { value: "soon" as TimeHorizon, label: "30d" },
+                    { value: "later" as TimeHorizon, label: "180d" },
+                    { value: "someday" as TimeHorizon, label: "∞" },
+                  ].map((option) => {
+                    const targetHorizonIndex = horizonOrder.indexOf(option.value)
+                    const steps = Math.abs(targetHorizonIndex - currentHorizonIndex)
+                    const direction = targetHorizonIndex < currentHorizonIndex ? "up" : "down"
+                    
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={async () => {
+                          if (steps === 0) return
+                          for (let i = 0; i < steps; i++) {
+                            await onMoveHorizon(task, direction)
+                          }
+                        }}
+                        className={cn(
+                          "min-w-[2.25rem] rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                          task.time_horizon === option.value
+                            ? "border-primary bg-accent"
+                            : "border-border bg-background hover:border-muted-foreground/60"
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && (
+                <div className="flex md:hidden flex-nowrap items-center gap-1.5 overflow-x-auto">
+                  {onMoveTop && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveTop(task)}
+                      disabled={!canMoveTop}
+                    >
+                      <ChevronsUp className="h-4 w-4" />
+                      <span className="sr-only">Move to top</span>
+                    </Button>
+                  )}
+                  {onMoveUp && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveUp(task)}
+                      disabled={!canMoveUp}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                      <span className="sr-only">Move up</span>
+                    </Button>
+                  )}
+                  {onMoveDown && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveDown(task)}
+                      disabled={!canMoveDown}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      <span className="sr-only">Move down</span>
+                    </Button>
+                  )}
+                  {onMoveBottom && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onMoveBottom(task)}
+                      disabled={!canMoveBottom}
+                    >
+                      <ChevronsDown className="h-4 w-4" />
+                      <span className="sr-only">Move to bottom</span>
+                    </Button>
+                  )}
+                  {!isSubtask && onAddSubtask && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onAddSubtask(task)}
+                    >
+                      <CornerDownRight className="h-4 w-4" />
+                      <span className="hidden min-[420px]:inline">Subtask</span>
+                      <span className="sr-only">Add subtask</span>
+                    </Button>
+                  )}
+                  {onAddSibling && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onAddSibling(task)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span className="hidden min-[420px]:inline">Task</span>
+                      <span className="sr-only">Add task</span>
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onDelete(task.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="hidden min-[420px]:inline">Delete</span>
+                    <span className="sr-only">Delete task</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : isEditing ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <input
@@ -363,121 +616,64 @@ export function TaskCard({
                   <span className="sr-only">Cancel</span>
                 </Button>
               </div>
-              {/* Action buttons - second row on mobile only */}
-              {!isSubtask && onMoveHorizon && (
-                <div className="flex md:hidden items-center gap-1">
-                  {[
-                    { value: "now" as TimeHorizon, label: "7d" },
-                    { value: "soon" as TimeHorizon, label: "30d" },
-                    { value: "later" as TimeHorizon, label: "180d" },
-                    { value: "someday" as TimeHorizon, label: "∞" },
-                  ].map((option) => {
-                    const targetHorizonIndex = horizonOrder.indexOf(option.value)
-                    const steps = Math.abs(targetHorizonIndex - currentHorizonIndex)
-                    const direction = targetHorizonIndex < currentHorizonIndex ? "up" : "down"
-                    
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={async () => {
-                          // Move to target horizon by calling onMoveHorizon multiple times
-                          if (steps === 0) return
-                          for (let i = 0; i < steps; i++) {
-                            await onMoveHorizon(task, direction)
-                          }
-                        }}
-                        className={cn(
-                          "min-w-[2.25rem] rounded-md border px-2 py-1 text-xs font-medium transition-colors",
-                          task.time_horizon === option.value
-                            ? "border-primary bg-accent"
-                            : "border-border bg-background hover:border-muted-foreground/60"
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    )
-                  })}
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 ml-auto" 
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onDelete(task.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete task</span>
-                  </Button>
-                </div>
-              )}
-              {isSubtask && (
-                <div className="flex md:hidden items-center gap-1 justify-end">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7" 
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => onDelete(task.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="sr-only">Delete subtask</span>
-                  </Button>
-                </div>
-              )}
             </div>
           ) : (
-            <div className="flex items-start gap-1.5">
-              {hasSubtasks && !isSubtask && (
-                <button
-                  type="button"
-                  className={cn(
-                    "mt-0.5 flex size-5 items-center justify-center rounded hover:bg-accent/40",
-                    "text-muted-foreground hover:text-foreground"
-                  )}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggleCollapse?.(task.id, !isCollapsed)
-                  }}
-                  aria-label={isCollapsed ? "Expand subtasks" : "Collapse subtasks"}
-                  aria-expanded={!isCollapsed}
-                  tabIndex={-1}
-                >
-                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!shouldEditOnClick()) return
-                  if (skipEditClickRef.current) {
+            <button
+              type="button"
+              onClick={() => {
+                if (isCompactLayout) {
+                  onOpenActions?.(task.id)
+                  return
+                }
+                if (!shouldEditOnClick()) return
+                if (skipEditClickRef.current) {
+                  skipEditClickRef.current = false
+                  return
+                }
+                startEditing()
+              }}
+              onPointerUp={(event) => {
+                if (isCompactLayout) {
+                  if (skipEditClickRef.current || longPressTriggeredRef.current) {
                     skipEditClickRef.current = false
                     return
                   }
+                  event.preventDefault()
+                  onOpenActions?.(task.id)
+                  return
+                }
+                if (event.pointerType === "mouse") return
+                if (!shouldEditOnClick()) return
+                if (skipEditClickRef.current) {
+                  skipEditClickRef.current = false
+                  return
+                }
+                if (allowDragRef.current) return
+                startEditing()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+              }}
+              onDoubleClick={() => {
+                if (task.completed) return
+                if (!isCompactLayout && lastPointerTypeRef.current !== "mouse") return
+                startEditing()
+              }}
+              onKeyDown={(e) => {
+                if (task.completed) return // Don't allow editing completed tasks
+                if (e.key === "Enter") {
+                  e.preventDefault()
                   startEditing()
-                }}
-                onDoubleClick={() => {
-                  if (task.completed) return
-                  if (lastPointerTypeRef.current !== "mouse") return
-                  startEditing()
-                }}
-                onKeyDown={(e) => {
-                  if (task.completed) return // Don't allow editing completed tasks
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    startEditing()
-                  }
-                }}
-                tabIndex={-1}
-                className={cn(
-                  "w-full text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
-                  task.completed && "text-muted-foreground cursor-default",
-                )}
-              >
-                {task.title}
-              </button>
-            </div>
+                }
+              }}
+              tabIndex={-1}
+              className={cn(
+                "inline text-left font-medium leading-tight text-foreground break-words cursor-grab active:cursor-grabbing",
+                task.completed && "text-muted-foreground cursor-default",
+              )}
+            >
+              {task.title}
+            </button>
           )}
           {task.description && !isEditing && (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{task.description}</p>

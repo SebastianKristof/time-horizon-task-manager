@@ -1,17 +1,21 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from "react"
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent, type Dispatch, type SetStateAction } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Task, TimeHorizon } from "@/lib/types"
 import { TaskCard } from "@/components/task-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Plus, X, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface HorizonsViewProps {
   initialTasks: Task[]
   userId: string
+  showCompletedTasks: boolean
+  setShowCompletedTasks: Dispatch<SetStateAction<boolean>>
+  isHelpOpen: boolean
+  setIsHelpOpen: Dispatch<SetStateAction<boolean>>
 }
 
 const horizons: { value: TimeHorizon; label: string; description: string }[] = [
@@ -22,7 +26,14 @@ const horizons: { value: TimeHorizon; label: string; description: string }[] = [
 ]
 const horizonOrder: TimeHorizon[] = ["now", "soon", "later", "someday"]
 
-export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
+export function HorizonsView({
+  initialTasks,
+  userId,
+  showCompletedTasks,
+  setShowCompletedTasks,
+  isHelpOpen,
+  setIsHelpOpen,
+}: HorizonsViewProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [newTaskInputs, setNewTaskInputs] = useState<Record<TimeHorizon, string>>({
@@ -33,25 +44,14 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   })
   const [focusedHorizon, setFocusedHorizon] = useState<TimeHorizon | null>(null)
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
-  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState<string | null>(null)
-  const [collapsedHorizons, setCollapsedHorizons] = useState<Record<TimeHorizon, boolean>>({
-    now: false,
-    soon: false,
-    later: false,
-    someday: false,
-  })
-  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({})
-  const [showCompletedTasks, setShowCompletedTasks] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("showCompletedTasks")
-      return stored !== null ? stored === "true" : true
-    }
-    return true
-  })
+  const [activeActionTaskId, setActiveActionTaskId] = useState<string | null>(null)
   const [subtaskInputParentId, setSubtaskInputParentId] = useState<string | null>(null)
   const [subtaskInputValue, setSubtaskInputValue] = useState("")
   const subtaskInputRef = useRef<HTMLInputElement | null>(null)
+  const [siblingInputTaskId, setSiblingInputTaskId] = useState<string | null>(null)
+  const [siblingInputValue, setSiblingInputValue] = useState("")
+  const siblingInputRef = useRef<HTMLInputElement | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ taskId: string; insertBefore: boolean } | null>(null)
   const inputRefs = useRef<Record<TimeHorizon, HTMLInputElement | null>>({
     now: null,
@@ -77,6 +77,12 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
   }, [subtaskInputParentId])
 
   useEffect(() => {
+    if (siblingInputTaskId && siblingInputRef.current) {
+      siblingInputRef.current.focus()
+    }
+  }, [siblingInputTaskId])
+
+  useEffect(() => {
     if (!focusedHorizon) return
     requestAnimationFrame(() => {
       inputRefs.current[focusedHorizon]?.focus()
@@ -89,6 +95,22 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       setDropIndicator(null)
       lastDropIndicatorRef.current = null
     }
+  }, [draggedTask])
+
+  useEffect(() => {
+    if (!draggedTask) return
+    const handleDragOver = (event: DragEvent) => {
+      const threshold = 80
+      const speed = 12
+      if (event.clientY < threshold) {
+        window.scrollBy({ top: -speed })
+      } else if (event.clientY > window.innerHeight - threshold) {
+        window.scrollBy({ top: speed })
+      }
+    }
+
+    window.addEventListener("dragover", handleDragOver)
+    return () => window.removeEventListener("dragover", handleDragOver)
   }, [draggedTask])
 
   useEffect(() => {
@@ -131,6 +153,19 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       }
     }
   }, [userId])
+
+  useEffect(() => {
+    if (!activeActionTaskId) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement
+      if (target.closest("[data-task-card='true']")) return
+      setActiveActionTaskId(null)
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
+  }, [activeActionTaskId])
 
   // Organize tasks by horizon, then by parent_task_id (NULLS FIRST), then by position
   const organizedTasks = useMemo(() => {
@@ -181,47 +216,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     return result
   }, [tasks, showCompletedTasks])
 
-  const visibleTasksByHorizon = useMemo(() => {
-    const result: Record<TimeHorizon, Task[]> = {
-      now: [],
-      soon: [],
-      later: [],
-      someday: [],
-    }
-
-    horizonOrder.forEach((horizon) => {
-      if (collapsedHorizons[horizon]) {
-        result[horizon] = []
-        return
-      }
-
-      const horizonTasks = organizedTasks[horizon]
-      const visible = horizonTasks.filter((task) => {
-        if (!task.parent_task_id) return true
-        return !collapsedTasks[task.parent_task_id]
-      })
-      result[horizon] = visible
-    })
-
-    return result
-  }, [organizedTasks, collapsedHorizons, collapsedTasks])
-
-  const visibleTaskIds = useMemo(() => {
-    const ids = new Set<string>()
-    horizonOrder.forEach((horizon) => {
-      visibleTasksByHorizon[horizon].forEach((task) => ids.add(task.id))
-    })
-    return ids
-  }, [visibleTasksByHorizon])
-
-  const firstVisibleTaskId = useMemo(() => {
-    for (const horizon of horizonOrder) {
-      const firstTask = visibleTasksByHorizon[horizon][0]
-      if (firstTask) return firstTask.id
-    }
-    return null
-  }, [visibleTasksByHorizon])
-
   const defaultFocusTaskId = useMemo(() => {
     for (const horizon of horizonOrder) {
       const firstTask = organizedTasks[horizon][0]
@@ -232,16 +226,9 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   useEffect(() => {
     if (focusedTaskId && !tasks.some((task) => task.id === focusedTaskId)) {
-      setFocusedTaskId(firstVisibleTaskId)
+      setFocusedTaskId(defaultFocusTaskId)
     }
-  }, [focusedTaskId, tasks, firstVisibleTaskId])
-
-  useEffect(() => {
-    if (!focusedTaskId) return
-    if (!visibleTaskIds.has(focusedTaskId)) {
-      setFocusedTaskId(firstVisibleTaskId)
-    }
-  }, [focusedTaskId, visibleTaskIds, firstVisibleTaskId])
+  }, [focusedTaskId, tasks, defaultFocusTaskId])
 
   const focusTask = (taskId: string) => {
     setFocusedTaskId(taskId)
@@ -265,13 +252,6 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [deleteConfirmTaskId])
-
-  // Persist showCompletedTasks to localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("showCompletedTasks", String(showCompletedTasks))
-    }
-  }, [showCompletedTasks])
 
   // Keyboard shortcut for toggling completed tasks visibility
   useEffect(() => {
@@ -920,6 +900,46 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
+  const handleMoveToTop = async (task: Task) => {
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      }
+      return t.parent_task_id === task.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex <= 0) return
+
+    const targetTask = siblingTasks[0]
+    if (task.parent_task_id === null) {
+      await handleReorderWithinHorizon(task, targetTask, true)
+    } else {
+      await handleReorderSubtasks(task, targetTask, true)
+    }
+    requestAnimationFrame(() => focusTask(task.id))
+  }
+
+  const handleMoveToBottom = async (task: Task) => {
+    const siblingTasks = tasks.filter((t) => {
+      if (task.parent_task_id === null) {
+        return t.time_horizon === task.time_horizon && t.parent_task_id === null
+      }
+      return t.parent_task_id === task.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+    const currentIndex = siblingTasks.findIndex((t) => t.id === task.id)
+    if (currentIndex < 0 || currentIndex >= siblingTasks.length - 1) return
+
+    const targetTask = siblingTasks[siblingTasks.length - 1]
+    if (task.parent_task_id === null) {
+      await handleReorderWithinHorizon(task, targetTask, false)
+    } else {
+      await handleReorderSubtasks(task, targetTask, false)
+    }
+    requestAnimationFrame(() => focusTask(task.id))
+  }
+
   const handleMoveHorizon = async (task: Task, direction: "up" | "down") => {
     const currentIndex = horizonOrder.indexOf(task.time_horizon)
     const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1
@@ -1120,6 +1140,94 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
+  const handleAddSibling = async (siblingTask: Task, title: string, keepInputOpen: boolean = false) => {
+    if (!title.trim()) return
+
+    const supabase = createClient()
+    const isSubtask = Boolean(siblingTask.parent_task_id)
+    const siblingTasks = tasks.filter((t) => {
+      if (isSubtask) {
+        return t.parent_task_id === siblingTask.parent_task_id
+      }
+      return t.time_horizon === siblingTask.time_horizon && !t.parent_task_id
+    })
+    siblingTasks.sort((a, b) => a.position - b.position)
+
+    const newPosition = siblingTask.position + 1
+    const tasksToShift = siblingTasks.filter((t) => t.position >= newPosition && t.id !== siblingTask.id)
+
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      title: title.trim(),
+      description: null,
+      time_horizon: siblingTask.time_horizon,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      position: newPosition,
+      parent_task_id: siblingTask.parent_task_id,
+    }
+
+    setTasks((prev) => [
+      ...prev.map((t) => {
+        if (tasksToShift.some((shifted) => shifted.id === t.id)) {
+          return { ...t, position: t.position + 1 }
+        }
+        return t
+      }),
+      newTask,
+    ])
+
+    if (keepInputOpen) {
+      setSiblingInputTaskId(newTask.id)
+      setSiblingInputValue("")
+    } else {
+      requestAnimationFrame(() => focusTask(newTask.id))
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+
+    try {
+      for (const shifted of tasksToShift) {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ position: shifted.position + 1 })
+          .eq("id", shifted.id)
+        if (error) throw error
+      }
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          user_id: userId,
+          title: title.trim(),
+          description: null,
+          time_horizon: siblingTask.time_horizon,
+          completed: false,
+          parent_task_id: siblingTask.parent_task_id,
+          position: newPosition,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setTasks((prev) =>
+        prev.map((t) => (t.id === newTask.id ? (data as Task) : t)),
+      )
+      if (keepInputOpen) {
+        requestAnimationFrame(() => siblingInputRef.current?.focus())
+      }
+    } catch (err) {
+      console.error("[v0] Error creating sibling task:", err)
+      setTasks((prev) => prev.filter((t) => t.id !== newTask.id))
+      setSiblingInputTaskId(null)
+      setSiblingInputValue("")
+    }
+  }
+
   const handleCreateTask = async (horizon: TimeHorizon, title: string, keepInputOpen: boolean = false) => {
     if (!title.trim()) return
 
@@ -1208,7 +1316,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
     if (event.altKey || event.ctrlKey || event.metaKey) return
 
-    const horizonTasks = visibleTasksByHorizon[task.time_horizon]
+    const horizonTasks = organizedTasks[task.time_horizon]
     const currentIndex = horizonTasks.findIndex((t) => t.id === task.id)
     if (currentIndex < 0) return
 
@@ -1219,56 +1327,42 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
         targetTask = horizonTasks[currentIndex - 1]
         if (!targetTask) {
           const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-          for (let i = currentHorizonIndex - 1; i >= 0; i -= 1) {
-            const targetHorizon = horizonOrder[i]
-            const targetTasks = visibleTasksByHorizon[targetHorizon]
-            if (targetTasks.length > 0) {
-              targetTask = targetTasks[targetTasks.length - 1]
-              break
-            }
-          }
-          if (!targetTask) return
+          const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[targetTasks.length - 1]
         }
         break
       case "ArrowDown":
         targetTask = horizonTasks[currentIndex + 1]
         if (!targetTask) {
           const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-          for (let i = currentHorizonIndex + 1; i < horizonOrder.length; i += 1) {
-            const targetHorizon = horizonOrder[i]
-            const targetTasks = visibleTasksByHorizon[targetHorizon]
-            if (targetTasks.length > 0) {
-              targetTask = targetTasks[0]
-              break
-            }
-          }
-          if (!targetTask) return
+          const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+          if (!targetHorizon) return
+          const targetTasks = organizedTasks[targetHorizon]
+          if (targetTasks.length === 0) return
+          targetTask = targetTasks[0]
         }
         break
       case "ArrowLeft": {
         const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-        for (let i = currentHorizonIndex - 1; i >= 0; i -= 1) {
-          const targetHorizon = horizonOrder[i]
-          const targetTasks = visibleTasksByHorizon[targetHorizon]
-          if (targetTasks.length === 0) continue
-          const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
-          targetTask = targetTasks[targetIndex]
-          break
-        }
-        if (!targetTask) return
+        const targetHorizon = horizonOrder[currentHorizonIndex - 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
         break
       }
       case "ArrowRight": {
         const currentHorizonIndex = horizonOrder.indexOf(task.time_horizon)
-        for (let i = currentHorizonIndex + 1; i < horizonOrder.length; i += 1) {
-          const targetHorizon = horizonOrder[i]
-          const targetTasks = visibleTasksByHorizon[targetHorizon]
-          if (targetTasks.length === 0) continue
-          const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
-          targetTask = targetTasks[targetIndex]
-          break
-        }
-        if (!targetTask) return
+        const targetHorizon = horizonOrder[currentHorizonIndex + 1]
+        if (!targetHorizon) return
+        const targetTasks = organizedTasks[targetHorizon]
+        if (targetTasks.length === 0) return
+        const targetIndex = Math.min(currentIndex, targetTasks.length - 1)
+        targetTask = targetTasks[targetIndex]
         break
       }
       default:
@@ -1281,7 +1375,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
     }
   }
 
-  const activeTaskId = focusedTaskId ?? firstVisibleTaskId
+  const activeTaskId = focusedTaskId ?? defaultFocusTaskId
   const deleteConfirmTask = deleteConfirmTaskId
     ? tasks.find((task) => task.id === deleteConfirmTaskId)
     : null
@@ -1299,45 +1393,12 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Horizons</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setShowCompletedTasks((prev) => !prev)}
-            className="text-sm"
-            title={showCompletedTasks ? "Hide recently completed tasks" : "Show recently completed tasks"}
-          >
-            {showCompletedTasks ? (
-              <>
-                <Eye className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">Hide recently completed</span>
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">Show recently completed</span>
-              </>
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setIsHelpOpen((prev) => !prev)}
-            className="text-sm"
-          >
-            Keyboard help
-          </Button>
-        </div>
-      </div>
       {isHelpOpen && (
         <div className="mb-6 rounded-md border border-border bg-card/60 p-4 text-sm text-muted-foreground">
           <div className="mb-2 font-medium text-foreground">Shortcuts</div>
           <div className="flex flex-col gap-1">
             <div>Up/Down: move focus</div>
             <div>Left/Right: change horizon</div>
-            <div>Shift + Left/Right: collapse/expand subtasks</div>
             <div>Enter: edit task</div>
             <div>Esc: cancel edit</div>
             <div>Space: toggle complete</div>
@@ -1413,32 +1474,25 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
       )}
       {horizons.map((horizon) => {
         const horizonTasks = organizedTasks[horizon.value]
-        const visibleHorizonTasks = visibleTasksByHorizon[horizon.value]
+        const incompleteTopLevelCount = tasks.filter(
+          (task) => task.time_horizon === horizon.value && !task.completed && !task.parent_task_id,
+        ).length
         const isFocused = focusedHorizon === horizon.value
-        const isCollapsed = collapsedHorizons[horizon.value]
+        const siblingTarget = siblingInputTaskId ? tasks.find((t) => t.id === siblingInputTaskId) : null
 
         return (
           <div key={horizon.value} className="mb-8">
             {/* Section heading */}
             <div className="mb-4 border-b border-border pb-2">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent/40"
-                  onClick={() => toggleHorizonCollapse(horizon.value)}
-                  aria-label={isCollapsed ? `Expand ${horizon.label}` : `Collapse ${horizon.label}`}
-                  aria-expanded={!isCollapsed}
-                >
-                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
                 <h2 className="text-xl font-semibold">{horizon.label}</h2>
-                <span className="text-xs text-muted-foreground">{horizonTasks.length}</span>
+                <span className="text-xs text-muted-foreground">{incompleteTopLevelCount}</span>
               </div>
             </div>
 
             {/* Task list */}
             <div
-              className="flex flex-col"
+              className="flex flex-col min-h-[40px]"
               role="list"
               aria-label={`${horizon.label} tasks`}
               onDragOver={(e) => {
@@ -1454,16 +1508,20 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                 setDropIndicator(null)
               }}
             >
-              {isCollapsed ? (
-                <div className="text-sm text-muted-foreground">Collapsed</div>
-              ) : (
-              visibleHorizonTasks.map((task, taskIndex) => {
+              {horizonTasks.length === 0 && (
+                <div className="rounded-md border border-dashed border-border/70 py-2 text-center text-sm text-muted-foreground">
+                  Drop tasks here
+                </div>
+              )}
+              {horizonTasks.map((task, taskIndex) => {
                 const isSubtask = task.parent_task_id !== null
                 const isTaskFocused = activeTaskId === task.id
                 
                 // Calculate canMoveUp and canMoveDown
                 let canMoveUp = false
                 let canMoveDown = false
+                let canMoveTop = false
+                let canMoveBottom = false
                 
                 if (isSubtask) {
                   // For subtasks, check position within parent's subtasks
@@ -1474,18 +1532,23 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                   const currentSubtaskIndex = siblingSubtasks.findIndex((t) => t.id === task.id)
                   canMoveUp = currentSubtaskIndex > 0
                   canMoveDown = currentSubtaskIndex >= 0 && currentSubtaskIndex < siblingSubtasks.length - 1
+                  canMoveTop = canMoveUp
+                  canMoveBottom = canMoveDown
                 } else {
                   // For top-level tasks, check position within horizon
                   const topLevelTasks = organizedTasks[horizon.value].filter((t) => !t.parent_task_id)
                   const currentTopLevelIndex = topLevelTasks.findIndex((t) => t.id === task.id)
                   canMoveUp = currentTopLevelIndex > 0
                   canMoveDown = currentTopLevelIndex >= 0 && currentTopLevelIndex < topLevelTasks.length - 1
+                  canMoveTop = canMoveUp
+                  canMoveBottom = canMoveDown
                 }
 
                 // Determine if we should show the subtask input after this task
                 // Show input after the last subtask of a parent, or after a parent with no subtasks
                 const isParentTask = !task.parent_task_id
                 let showSubtaskInput = false
+                let showSiblingInput = false
                 
                 if (subtaskInputParentId) {
                   if (isParentTask && task.id === subtaskInputParentId) {
@@ -1495,16 +1558,25 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     showSubtaskInput = parentSubtasks.length === 0
                   } else if (isSubtask && task.parent_task_id === subtaskInputParentId) {
                     // Show input after the last subtask of this parent
-                    const nextTask = visibleHorizonTasks[taskIndex + 1]
+                    const nextTask = horizonTasks[taskIndex + 1]
                     showSubtaskInput = !nextTask || nextTask.parent_task_id !== subtaskInputParentId
+                  }
+                }
+
+                if (siblingTarget) {
+                  if (siblingTarget.parent_task_id) {
+                    showSiblingInput = task.id === siblingTarget.id
+                  } else if (isParentTask && task.id === siblingTarget.id) {
+                    const parentSubtasks = horizonTasks.filter((t) => t.parent_task_id === task.id)
+                    showSiblingInput = parentSubtasks.length === 0
+                  } else if (isSubtask && task.parent_task_id === siblingTarget.id) {
+                    const nextTask = horizonTasks[taskIndex + 1]
+                    showSiblingInput = !nextTask || nextTask.parent_task_id !== siblingTarget.id
                   }
                 }
 
                 const showDropIndicatorAbove = draggedTask && dropIndicator?.taskId === task.id && dropIndicator.insertBefore
                 const showDropIndicatorBelow = draggedTask && dropIndicator?.taskId === task.id && !dropIndicator.insertBefore
-                const parentSubtasks = horizonTasks.filter((t) => t.parent_task_id === task.id)
-                const hasSubtasks = !isSubtask && parentSubtasks.length > 0
-                const isCollapsed = hasSubtasks && collapsedTasks[task.id]
 
                 return (
                   <div key={task.id}>
@@ -1522,26 +1594,42 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         onToggleComplete={handleToggleComplete}
                         onDelete={handleDelete}
                         isSubtask={isSubtask}
-                        hasSubtasks={hasSubtasks}
-                        isCollapsed={isCollapsed}
-                        onToggleCollapse={toggleTaskCollapse}
                         onMoveUp={handleMoveUp}
                         onMoveDown={handleMoveDown}
+                        onMoveTop={handleMoveToTop}
+                        onMoveBottom={handleMoveToBottom}
                         onMoveHorizon={handleMoveHorizon}
                         onEdit={handleEdit}
                         onAddSubtask={(parentTask) => {
                           setSubtaskInputParentId(parentTask.id)
                           setSubtaskInputValue("")
-                          setCollapsedTasks((prev) => ({ ...prev, [parentTask.id]: false }))
+                        }}
+                        onAddSibling={(targetTask) => {
+                          setSiblingInputTaskId(targetTask.id)
+                          setSiblingInputValue("")
+                          setActiveActionTaskId(targetTask.id)
                         }}
                         canMoveUp={canMoveUp}
                         canMoveDown={canMoveDown}
+                        canMoveTop={canMoveTop}
+                        canMoveBottom={canMoveBottom}
                         onDropOnTask={handleDropOnTask}
                         onDragOverTask={handleDragOverTask}
                         draggedTask={draggedTask}
                         isFocused={isTaskFocused}
                         onFocusTask={setFocusedTaskId}
                         onNavigateKey={handleNavigateKey}
+                        isActionsOpen={activeActionTaskId === task.id}
+                        onOpenActions={(taskId) => {
+                          setActiveActionTaskId(taskId)
+                          setSiblingInputTaskId(null)
+                          setSiblingInputValue("")
+                        }}
+                        onCloseActions={() => {
+                          setActiveActionTaskId(null)
+                          setSiblingInputTaskId(null)
+                          setSiblingInputValue("")
+                        }}
                       />
                     </div>
                     {showDropIndicatorBelow && (
@@ -1600,13 +1688,59 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                         </Button>
                       </div>
                     )}
+                    {showSiblingInput && siblingTarget && (
+                      <div className={cn("mt-1 flex items-center gap-2", siblingTarget.parent_task_id ? "ml-6" : "")}>
+                        <input
+                          ref={siblingInputRef}
+                          type="text"
+                          value={siblingInputValue}
+                          onChange={(e) => setSiblingInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              if (siblingInputValue.trim()) {
+                                handleAddSibling(siblingTarget, siblingInputValue, true)
+                              }
+                            } else if (e.key === "Escape") {
+                              e.preventDefault()
+                              setSiblingInputValue("")
+                              setSiblingInputTaskId(null)
+                            }
+                          }}
+                          onBlur={() => {
+                            if (siblingInputValue.trim()) {
+                              handleAddSibling(siblingTarget, siblingInputValue, false)
+                            } else {
+                              setSiblingInputTaskId(null)
+                            }
+                          }}
+                          placeholder="Task title..."
+                          tabIndex={-1}
+                          className="flex-1 border-b border-primary bg-transparent px-1 py-0.5 text-sm outline-none focus:border-primary"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSiblingInputValue("")
+                            setSiblingInputTaskId(null)
+                          }}
+                          tabIndex={-1}
+                        >
+                          <X className="h-4 w-4" />
+                          <span className="sr-only">Cancel sibling</span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )
-              })
-              )}
+              })}
 
               {/* Inline task creation */}
-              {!isCollapsed && isFocused ? (
+              {isFocused ? (
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border bg-card/50">
                     <Plus className="h-4 w-4 text-muted-foreground" />
@@ -1678,7 +1812,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     <span className="sr-only">Cancel</span>
                   </Button>
                 </div>
-              ) : !isCollapsed ? (
+              ) : (
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -1696,7 +1830,7 @@ export function HorizonsView({ initialTasks, userId }: HorizonsViewProps) {
                     <span className="sr-only">Add a task</span>
                   </Button>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         )

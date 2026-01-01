@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
+import { AccountActions } from "@/components/account-actions"
 import Link from "next/link"
 import { ChevronLeft, Share2 } from "lucide-react"
 import { format, parseISO } from "date-fns"
@@ -38,7 +39,7 @@ export default async function SnapshotsPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-semibold">Snapshots</h1>
-        <div className="w-[100px]" />
+        <AccountActions />
       </header>
 
       {/* Main content */}
