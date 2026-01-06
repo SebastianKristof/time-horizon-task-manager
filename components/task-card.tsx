@@ -335,55 +335,21 @@ export function TaskCard({
           return
         }
         
-        // Add visual feedback to the original card
-        if (cardRef.current) {
-          cardRef.current.style.opacity = "0.5"
-          cardRef.current.style.transform = "scale(0.95)"
-        }
-        
-        // Create a custom drag image that matches the task card
+        // Create a custom drag image that appears on the right side
         const dragImage = document.createElement("div")
         dragImage.style.position = "absolute"
         dragImage.style.top = "-1000px"
         dragImage.style.left = "-1000px"
-        
-        // Get the actual card dimensions for better visual feedback
-        const cardRect = cardRef.current?.getBoundingClientRect()
-        const cardWidth = cardRect ? Math.min(cardRect.width, 300) : 250
-        
-        dragImage.style.width = `${cardWidth}px`
+        dragImage.style.width = "200px"
         dragImage.style.padding = "8px 12px"
         dragImage.style.backgroundColor = "hsl(var(--background))"
         dragImage.style.border = "1px solid hsl(var(--border))"
         dragImage.style.borderRadius = "6px"
-        dragImage.style.boxShadow = "0 8px 16px rgba(0, 0, 0, 0.2)"
+        dragImage.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
         dragImage.style.fontSize = "14px"
         dragImage.style.fontWeight = "500"
         dragImage.style.color = "hsl(var(--foreground))"
-        dragImage.style.display = "flex"
-        dragImage.style.alignItems = "center"
-        dragImage.style.gap = "8px"
-        
-        // Add checkbox visual
-        const checkbox = document.createElement("div")
-        checkbox.style.width = "16px"
-        checkbox.style.height = "16px"
-        checkbox.style.border = task.completed ? "none" : "1px solid hsl(var(--muted-foreground))"
-        checkbox.style.borderRadius = "4px"
-        checkbox.style.flexShrink = "0"
-        if (task.completed) {
-          checkbox.style.backgroundColor = "hsl(var(--primary))"
-        }
-        
-        const text = document.createElement("span")
-        text.textContent = task.title
-        text.style.flex = "1"
-        text.style.overflow = "hidden"
-        text.style.textOverflow = "ellipsis"
-        text.style.whiteSpace = "nowrap"
-        
-        dragImage.appendChild(checkbox)
-        dragImage.appendChild(text)
+        dragImage.textContent = task.title
         document.body.appendChild(dragImage)
         
         // Set the drag image offset to the right (positive x offset)
@@ -392,19 +358,12 @@ export function TaskCard({
         
         // Clean up after a short delay
         setTimeout(() => {
-          if (document.body.contains(dragImage)) {
-            document.body.removeChild(dragImage)
-          }
+          document.body.removeChild(dragImage)
         }, 0)
         
         onDragStart(task)
       }}
       onDragEnd={() => {
-        // Restore original card appearance
-        if (cardRef.current) {
-          cardRef.current.style.opacity = ""
-          cardRef.current.style.transform = ""
-        }
         allowDragRef.current = false
         skipEditClickRef.current = false
         onDragEnd()
@@ -433,7 +392,6 @@ export function TaskCard({
             task.completed ? "border-transparent" : "border-muted-foreground/80 bg-transparent",
           )}
           tabIndex={-1}
-          title={task.completed ? "Mark incomplete" : "Mark complete"}
         >
           {task.completed ? (
             <Check className="h-4 w-4 text-green-600 stroke-[5]" />
@@ -486,7 +444,6 @@ export function TaskCard({
                     className="h-7 w-7"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={saveEdit}
-                    title="Save"
                   >
                     <Check className="h-4 w-4" />
                     <span className="sr-only">Save</span>
@@ -499,14 +456,13 @@ export function TaskCard({
                   className="h-7 w-7 ml-auto"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={closeActions}
-                  title="Close actions"
                 >
                   <X className="h-4 w-4" />
                   <span className="sr-only">Close</span>
                 </Button>
               </div>
               {/* Action buttons - first row on mobile only */}
-              {!isSubtask && onMoveHorizon && !isEditing && (
+              {!isSubtask && onMoveHorizon && (
                 <div className="flex md:hidden flex-nowrap items-center gap-1 overflow-x-auto">
                   {[
                     { value: "now" as TimeHorizon, label: "7d" },
@@ -535,7 +491,6 @@ export function TaskCard({
                             ? "border-primary bg-accent"
                             : "border-border bg-background hover:border-muted-foreground/60"
                         )}
-                        title={`Move to ${option.label}`}
                       >
                         {option.label}
                       </button>
@@ -543,7 +498,7 @@ export function TaskCard({
                   })}
                 </div>
               )}
-              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && !isEditing && (
+              {(onMoveUp || onMoveDown || onMoveTop || onMoveBottom || onAddSubtask || onAddSibling) && (
                 <div className="flex md:hidden flex-nowrap items-center gap-1.5 overflow-x-auto">
                   {onMoveTop && (
                     <Button
@@ -553,7 +508,6 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveTop(task)}
                       disabled={!canMoveTop}
-                      title="Move to top"
                     >
                       <ChevronsUp className="h-4 w-4" />
                       <span className="sr-only">Move to top</span>
@@ -567,7 +521,6 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveUp(task)}
                       disabled={!canMoveUp}
-                      title="Move up"
                     >
                       <ChevronUp className="h-4 w-4" />
                       <span className="sr-only">Move up</span>
@@ -581,7 +534,6 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveDown(task)}
                       disabled={!canMoveDown}
-                      title="Move down"
                     >
                       <ChevronDown className="h-4 w-4" />
                       <span className="sr-only">Move down</span>
@@ -595,7 +547,6 @@ export function TaskCard({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onMoveBottom(task)}
                       disabled={!canMoveBottom}
-                      title="Move to bottom"
                     >
                       <ChevronsDown className="h-4 w-4" />
                       <span className="sr-only">Move to bottom</span>
@@ -608,7 +559,6 @@ export function TaskCard({
                       className="h-7 gap-1.5 px-2 text-xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSubtask(task)}
-                      title="Add subtask"
                     >
                       <CornerDownRight className="h-4 w-4" />
                       <span className="hidden min-[420px]:inline">Subtask</span>
@@ -622,7 +572,6 @@ export function TaskCard({
                       className="h-7 gap-1.5 px-2 text-xs"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onAddSibling(task)}
-                      title="Add task"
                     >
                       <Plus className="h-4 w-4" />
                       <span className="hidden min-[420px]:inline">Task</span>
@@ -635,7 +584,6 @@ export function TaskCard({
                     className="h-7 gap-1.5 px-2 text-xs"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onDelete(task.id)}
-                    title="Delete task"
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="hidden min-[420px]:inline">Delete</span>
@@ -663,7 +611,6 @@ export function TaskCard({
                   className="h-7 w-7"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={cancelEdit}
-                  title="Cancel edit"
                 >
                   <X className="h-4 w-4" />
                   <span className="sr-only">Cancel</span>
@@ -746,7 +693,6 @@ export function TaskCard({
                 onClick={() => onMoveUp(task)}
                 disabled={!canMoveUp}
                 tabIndex={-1}
-                title="Move up in list"
               >
                 <ChevronUp className="h-4 w-4" />
                 <span className="sr-only">Move up in list</span>
@@ -760,7 +706,6 @@ export function TaskCard({
                 onClick={() => onMoveDown(task)}
                 disabled={!canMoveDown}
                 tabIndex={-1}
-                title="Move down in list"
               >
                 <ChevronDown className="h-4 w-4" />
                 <span className="sr-only">Move down in list</span>
@@ -775,7 +720,6 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "up")}
                   disabled={!canMoveHorizonUp}
                   tabIndex={-1}
-                  title="Move to earlier horizon"
                 >
                   <ArrowUp className="h-4 w-4" />
                   <span className="sr-only">Move to earlier horizon</span>
@@ -787,7 +731,6 @@ export function TaskCard({
                   onClick={() => onMoveHorizon(task, "down")}
                   disabled={!canMoveHorizonDown}
                   tabIndex={-1}
-                  title="Move to later horizon"
                 >
                   <ArrowDown className="h-4 w-4" />
                   <span className="sr-only">Move to later horizon</span>
@@ -801,36 +744,9 @@ export function TaskCard({
                 className="h-7 w-7"
                 onClick={() => onAddSubtask(task)}
                 tabIndex={-1}
-                title="Add subtask"
               >
-                <CornerDownRight className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
                 <span className="sr-only">Add subtask</span>
-              </Button>
-            )}
-            {!isSubtask && onAddSibling && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => onAddSibling(task)}
-                tabIndex={-1}
-                title="Add sibling task"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="sr-only">Add sibling task</span>
-              </Button>
-            )}
-            {isSubtask && onAddSibling && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => onAddSibling(task)}
-                tabIndex={-1}
-                title="Add sibling subtask"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="sr-only">Add sibling subtask</span>
               </Button>
             )}
             <Button
@@ -839,7 +755,6 @@ export function TaskCard({
               className="h-7 w-7"
               onClick={() => onDelete(task.id)}
               tabIndex={-1}
-              title="Delete task"
             >
               <Trash2 className="h-4 w-4" />
               <span className="sr-only">Delete task</span>

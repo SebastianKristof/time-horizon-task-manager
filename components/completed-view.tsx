@@ -57,7 +57,18 @@ export function CompletedView({ initialTasks, userId }: CompletedViewProps) {
                   return prev.map((task) => (task.id === updatedTask.id ? updatedTask : task))
                 } else {
                   // Remove task if it's unchecked and not a subtask of a completed parent
-                  return prev.filter((task) => task.id !== updatedTask.id)
+                  // Also remove all incomplete subtasks of this task (if it was a parent)
+                  return prev.filter((task) => {
+                    // Remove the uncompleted task itself
+                    if (task.id === updatedTask.id) {
+                      return false
+                    }
+                    // Remove incomplete subtasks of the uncompleted parent
+                    if (task.parent_task_id === updatedTask.id && !task.completed) {
+                      return false
+                    }
+                    return true
+                  })
                 }
               }
             })
@@ -99,8 +110,9 @@ export function CompletedView({ initialTasks, userId }: CompletedViewProps) {
     const completedTaskIds = new Set(completedTasks.map((t) => t.id))
     
     // Then, include all subtasks of completed tasks (even if not completed)
+    // Exclude subtasks that are already in completedTasks to avoid duplicates
     const subtasksOfCompleted = tasks.filter((t) => 
-      t.parent_task_id && completedTaskIds.has(t.parent_task_id)
+      t.parent_task_id && completedTaskIds.has(t.parent_task_id) && !completedTaskIds.has(t.id)
     )
     
     // Combine completed tasks with their subtasks
