@@ -12,7 +12,7 @@ Try a single planning session. Capture the tasks on your mind, decide what belon
 
 ## Run locally
 
-Use Node.js 22+, pnpm, and a Supabase project.
+Use Node.js 22+, pnpm 10, and a Supabase project.
 
 ~~~sh
 git clone https://github.com/SebastianKristof/time-horizon-task-manager.git
@@ -30,4 +30,4 @@ pnpm test --run
 pnpm build
 ~~~
 
-The [testing guide](tests/README.md) describes the Vitest suites and how to run the Playwright journeys. The project started with a v0 scaffold and uses Next.js, React, TypeScript, and Supabase.
+The [testing guide](tests/README.md) describes the Vitest suites and how to run the Playwright journeys. The app uses Next.js, React, TypeScript, and Supabase.
