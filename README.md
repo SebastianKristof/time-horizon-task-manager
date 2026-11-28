@@ -1,77 +1,33 @@
 # Time Horizon Task Manager
 
-A task manager focused on calm attention management, organizing tasks across time horizons: now, soon, later, Someday.
+I built this to explore whether sorting tasks by when they need attention could make a backlog easier to use. Each task belongs to **Now**, **Soon**, **Later**, or **Someday**. Moving a task between horizons is the main interaction.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/svkristofs-projects/v0-time-horizon-task-manager)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/lgi1lu8cgi6)
+Try a single planning session. Capture the tasks on your mind, decide what belongs in **Now**, and sort the rest by how soon you need to revisit them. Add subtasks when a task needs to be broken down, and share a snapshot if someone else needs to see your plan.
 
-## Local Development Setup
+## Design notes
 
-### Prerequisites
+- Tasks have an explicit position within each horizon. Reordering keeps that position.
+- Supabase stores tasks and handles sign-in. The migrations define row-level security for task access.
+- A shared snapshot captures a saved view. Snapshot contents are publicly readable, so share only material intended for public viewing.
 
-- Node.js 18+ and pnpm installed
-- A Supabase project (create one at [supabase.com](https://supabase.com))
+## Run locally
 
-### Installation
+Use Node.js 22+, pnpm 10, and a Supabase project.
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd v0-time-horizon-task-manager
-   ```
+~~~sh
+git clone https://github.com/SebastianKristof/time-horizon-task-manager.git
+cd time-horizon-task-manager
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+~~~
 
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   ```
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. Apply the editable SQL migrations from [`scripts/`](scripts/) in order in the Supabase SQL Editor. If you have `psql` and a database connection URL, set `DATABASE_URL` and run `pnpm db:migrate` instead. Then run `pnpm dev` and open [localhost:3000](http://localhost:3000).
 
-3. **Set up environment variables**
-   
-   Create a `.env.local` file in the root directory:
-   ```bash
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-   
-   You can find these values in your Supabase project dashboard under Settings → API.
+## Checks
 
-4. **Set up the database**
-   
-   Run the SQL migration scripts in your Supabase SQL Editor (in order):
-   - `scripts/001_create_tables.sql` - Creates the tasks and snapshots tables with RLS policies
-   - `scripts/002_add_snapshot_rls_public.sql` - Adds public read access for shared snapshots
-   - `scripts/003_add_task_ordering_and_subtasks.sql` - Adds position and parent_task_id fields for task ordering and subtasks
+~~~sh
+pnpm test --run
+pnpm build
+~~~
 
-5. **Start the development server**
-   ```bash
-   pnpm dev
-   ```
-   
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Available Scripts
-
-- `pnpm dev` - Start development server
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm lint` - Run ESLint
-
-## Project Structure
-
-- `app/` - Next.js app router pages and routes
-- `components/` - React components including UI components from shadcn/ui
-- `lib/` - Utility functions and Supabase client setup
-- `scripts/` - SQL migration scripts for database setup
-
-## Deployment
-
-Your project is live at:
-
-**[https://vercel.com/svkristofs-projects/v0-time-horizon-task-manager](https://vercel.com/svkristofs-projects/v0-time-horizon-task-manager)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+The [testing guide](tests/README.md) describes the Vitest suites and how to run the Playwright journeys. The app uses Next.js, React, TypeScript, and Supabase.
